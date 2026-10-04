@@ -533,7 +533,7 @@ io.on('connection', (socket) => {
 
     let nightSummary = '';
     if (wasSaved && victim) {
-      nightSummary = `🩺 The Doctor saved ${victim.name}! No one died tonight.`;
+      nightSummary = `🕊️ It was a quiet night. No one died tonight!`;
     } else if (victim) {
       nightSummary = `🩸 ${victim.name} was attacked and eliminated by the Mafia during the night!`;
     } else {
@@ -569,8 +569,8 @@ io.on('connection', (socket) => {
       dayNumber: room.dayNumber,
       players: getPublicPlayers(room.players),
       nightSummary,
-      wasSaved,
-      victimName: victim ? victim.name : null,
+      wasSaved: false,
+      victimName: wasSaved ? null : (victim ? victim.name : null),
       history: room.history,
       message: '☀️ Town wakes up! You have 3 minutes to discuss and vote. Uncast votes will automatically count as Skip.'
     });
