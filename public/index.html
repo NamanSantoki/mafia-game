@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>MAFIA: Social Deduction Game</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Pirata+One&display=swap" rel="stylesheet">
+  <!-- Socket.io client -->
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="theme-noir">
+
+  <!-- Background Ambience Effect -->
+  <div class="bg-vignette"></div>
+  <div class="fog-overlay"></div>
+  <div class="blood-particles" id="particlesContainer"></div>
+
+  <!-- Top Controls -->
+  <div class="top-nav-bar">
+    <button id="btnExitGame" class="nav-btn exit-btn hidden" title="Leave Game Room">
+      <i class="fa-solid fa-arrow-right-from-bracket"></i> <span>Leave Room</span>
+    </button>
+    <button id="soundToggleBtn" class="sound-toggle" title="Toggle Game Audio">
+      <i class="fa-solid fa-volume-high" id="soundIcon"></i>
+    </button>
+  </div>
+
+  <main class="app-container">
+
+    <!-- ============================================== -->
+    <!-- VIEW 1: WELCOME & LANDING                      -->
+    <!-- ============================================== -->
+    <section id="viewLanding" class="view-panel active">
+      <div class="brand-hero">
+        <div class="brand-badge"><i class="fa-solid fa-skull"></i> Secret Role Game</div>
+        <h1 class="brand-title">M A F I A</h1>
+        <p class="brand-tagline">Trust nobody. Eliminate the impostors.</p>
+      </div>
+
+      <div class="landing-tabs">
+        <button id="tabJoin" class="tab-btn active" onclick="switchLandingTab('join')">
+          <i class="fa-solid fa-mobile-screen"></i> Join on Phone
+        </button>
+        <button id="tabHost" class="tab-btn" onclick="switchLandingTab('host')">
+          <i class="fa-solid fa-crown"></i> Host Game
+        </button>
+      </div>
+
+      <!-- Join Form -->
+      <div id="joinFormPanel" class="form-card">
+        <div class="input-group">
+          <label for="joinRoomCode"><i class="fa-solid fa-key"></i> 4-Letter Room Code</label>
+          <input type="text" id="joinRoomCode" placeholder="e.g. DARK" maxlength="4" autocomplete="off" autocorrect="off" autocapitalize="characters">
+        </div>
+        <div class="input-group">
+          <label for="joinPlayerName"><i class="fa-solid fa-user"></i> Your Name</label>
+          <input type="text" id="joinPlayerName" placeholder="Enter your name" maxlength="15" autocomplete="off">
+        </div>
+        <button id="btnJoinRoom" class="btn btn-primary btn-block">
+          <span>Join Game Room</span>
+          <i class="fa-solid fa-arrow-right"></i>
+        </button>
+      </div>
+
+      <!-- Host Form -->
+      <div id="hostFormPanel" class="form-card hidden">
+        <div class="input-group">
+          <label for="hostPlayerName"><i class="fa-solid fa-user-tie"></i> Host Name</label>
+          <input type="text" id="hostPlayerName" placeholder="e.g. GameMaster" maxlength="15" value="Host">
+        </div>
+
+        <div class="role-config-box">
+          <div class="role-config-title"><i class="fa-solid fa-sliders"></i> Role Configuration</div>
+          
+          <div class="config-row">
+            <div class="config-label">
+              <span class="role-pill mafia"><i class="fa-solid fa-gun"></i> Mafia Count</span>
+              <small class="helper-text">Eliminates town at night</small>
+            </div>
+            <div class="counter-control">
+              <button type="button" class="btn-counter" onclick="adjustMafiaCount(-1)">-</button>
+              <span id="cfgMafiaCount" class="counter-value">1</span>
+              <button type="button" class="btn-counter" onclick="adjustMafiaCount(1)">+</button>
+            </div>
+          </div>
+
+          <div class="config-row">
+            <div class="config-label">
+              <span class="role-pill doctor"><i class="fa-solid fa-user-doctor"></i> Doctor (1)</span>
+              <small class="helper-text">Protects 1 person every night</small>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="cfgDoctor" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="config-row">
+            <div class="config-label">
+              <span class="role-pill detective"><i class="fa-solid fa-magnifying-glass"></i> Detective (1)</span>
+              <small class="helper-text">Investigates 1 suspect every night</small>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="cfgDetective" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <button id="btnCreateRoom" class="btn btn-gold btn-block">
+          <i class="fa-solid fa-fire"></i> Create Game Room
+        </button>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- VIEW 2: LOBBY (WAITING ROOM & QR CODE)        -->
+    <!-- ============================================== -->
+    <section id="viewLobby" class="view-panel">
+      <div class="lobby-header">
+        <div class="room-code-badge">
+          <span class="code-label">ROOM CODE</span>
+          <span id="displayRoomCode" class="code-value">----</span>
+          <button id="btnCopyCode" class="btn-icon" title="Copy code"><i class="fa-regular fa-copy"></i></button>
+        </div>
+
+        <div class="lobby-status-pill" id="lobbyPlayerCounter">
+          <i class="fa-solid fa-users"></i> <span id="lobbyPlayerCountNum">0</span> Players Connected
+        </div>
+      </div>
+
+      <!-- QR Code Banner (for TV / Host screen) -->
+      <div class="qr-card">
+        <div class="qr-wrapper">
+          <img id="qrImage" alt="Scan to join on phone" src="">
+          <div class="qr-scan-hint"><i class="fa-solid fa-camera"></i> Scan with phone camera to join</div>
+        </div>
+        <div class="qr-instructions">
+          <p class="join-url-text" id="displayJoinUrl">http://...:3000</p>
+          <div class="roles-breakdown" id="lobbyRolesBreakdown">
+            <span class="badge mafia-badge"><i class="fa-solid fa-gun"></i> <span id="lblMafiaCount">1</span> Mafia</span>
+            <span class="badge doctor-badge" id="lblDocBadge"><i class="fa-solid fa-user-doctor"></i> 1 Doctor</span>
+            <span class="badge detective-badge" id="lblDetBadge"><i class="fa-solid fa-magnifying-glass"></i> 1 Detective</span>
+            <span class="badge villager-badge"><i class="fa-solid fa-people-group"></i> Rest: Villagers</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Player List -->
+      <div class="player-grid-section">
+        <div class="section-subtitle">
+          <span>Players in Room</span>
+          <span class="min-players-hint" id="minPlayersHint">Need at least 3 players</span>
+        </div>
+        <div id="lobbyPlayersList" class="player-grid">
+          <!-- Dynamic Player Badges -->
+        </div>
+      </div>
+
+      <!-- Host Action Controls -->
+      <div id="hostLobbyControls" class="lobby-action-bar hidden">
+        <button id="btnStartGame" class="btn btn-blood btn-large btn-block mb-2">
+          <i class="fa-solid fa-play"></i> START GAME & ASSIGN ROLES
+        </button>
+      </div>
+
+      <div id="playerLobbyNotice" class="player-waiting-notice mb-2">
+        <div class="spinner-pulse"></div>
+        <span>Waiting for Host to start the game...</span>
+      </div>
+
+      <button id="btnLeaveLobby" class="btn btn-subtle btn-block mt-3" onclick="leaveGameRoom()">
+        <i class="fa-solid fa-arrow-right-from-bracket"></i> Leave Room
+      </button>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- VIEW 3: SECRET ROLE REVEAL (PHONE VIEW)        -->
+    <!-- ============================================== -->
+    <section id="viewRoleReveal" class="view-panel">
+      <div class="reveal-prompt">
+        <h2>Your Secret Identity</h2>
+        <p>Keep your phone screen hidden from other players!</p>
+      </div>
+
+      <!-- 3D Flip Role Card -->
+      <div class="card-scene">
+        <div class="role-card" id="roleCardElement" onclick="flipRoleCard()">
+          
+          <!-- Card Front (Hidden) -->
+          <div class="card-face card-front">
+            <div class="card-pattern"></div>
+            <div class="card-shield">
+              <i class="fa-solid fa-eye-slash"></i>
+            </div>
+            <div class="card-tap-text">TAP TO REVEAL ROLE</div>
+            <div class="card-security-hint">Hold to shield from prying eyes</div>
+          </div>
+
+          <!-- Card Back (Revealed) -->
+          <div class="card-face card-back" id="roleCardBack">
+            <div class="card-role-icon" id="roleIconContainer">
+              <i class="fa-solid fa-mask"></i>
+            </div>
+            <div class="card-role-title" id="roleTitleText">MAFIA</div>
+            <div class="card-role-team" id="roleTeamText">Team: Mafia</div>
+            <div class="card-role-desc" id="roleDescriptionText">Your secret goal description will appear here.</div>
+
+            <!-- Mafia Teammates Box (Only for Mafia) -->
+            <div id="mafiaTeammatesBox" class="mafia-allies-box hidden">
+              <div class="allies-title"><i class="fa-solid fa-handshake"></i> Your Mafia Partners:</div>
+              <div id="mafiaAlliesList" class="allies-names">None (You are the only Mafia)</div>
+            </div>
+
+            <button class="btn btn-subtle btn-sm mt-3" onclick="event.stopPropagation(); flipRoleCard()">
+              <i class="fa-solid fa-eye-slash"></i> Hide Card Again
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Host Control to move to Night -->
+      <div id="hostProceedNightBar" class="mt-4 hidden">
+        <button id="btnProceedToNight" class="btn btn-blood btn-block">
+          <i class="fa-solid fa-moon"></i> All Roles Viewed: Start Night 1
+        </button>
+      </div>
+
+      <div id="playerWaitingNightNotice" class="player-waiting-notice mt-4">
+        <span>Memorize your role. Night will begin shortly.</span>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- VIEW 4: NIGHT PHASE                           -->
+    <!-- ============================================== -->
+    <section id="viewNight" class="view-panel">
+      <div class="phase-header night-theme">
+        <div class="phase-badge"><i class="fa-solid fa-moon"></i> NIGHT PHASE &bull; ROUND <span class="lblDayNum">1</span></div>
+        <h2 class="phase-title">Town Falls Asleep</h2>
+        <p class="phase-desc">Special roles must secretly perform their actions on their phones.</p>
+      </div>
+
+      <!-- Night Action Container for Active Player -->
+      <div id="nightActionContainer" class="night-action-box">
+        <!-- Will be dynamically injected based on player role: Mafia, Doctor, Detective, or Villager -->
+      </div>
+
+      <!-- Host Night Management Panel -->
+      <div id="hostNightControlPanel" class="host-phase-card hidden">
+        <div class="host-card-title"><i class="fa-solid fa-satellite-dish"></i> Night Actions Progress</div>
+        <div class="progress-checklist">
+          <div class="check-item" id="checkMafia"><i class="fa-regular fa-circle-check"></i> Mafia Kill Target Chosen</div>
+          <div class="check-item" id="checkDoctor"><i class="fa-regular fa-circle-check"></i> Doctor Protection Chosen</div>
+          <div class="check-item" id="checkDetective"><i class="fa-regular fa-circle-check"></i> Detective Investigation Done</div>
+        </div>
+        <button id="btnResolveNight" class="btn btn-blood btn-block mt-3">
+          <i class="fa-solid fa-sun"></i> Resolve Night & Wake Town
+        </button>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- VIEW 5: DAY PHASE (DISCUSSION & VOTING)        -->
+    <!-- ============================================== -->
+    <section id="viewDay" class="view-panel">
+      <div class="phase-header day-theme">
+        <div class="phase-badge"><i class="fa-solid fa-sun"></i> DAY PHASE &bull; ROUND <span class="lblDayNum">1</span></div>
+        <h2 class="phase-title">Town Wakes Up</h2>
+      <!-- 3-Minute Voting Countdown Widget -->
+      <div class="timer-card" id="votingTimerCard">
+        <div class="timer-top">
+          <div class="timer-label"><i class="fa-solid fa-stopwatch"></i> Voting Time Remaining</div>
+          <div class="timer-clock" id="votingClockDisplay">03:00</div>
+        </div>
+        <div class="timer-progress-bar">
+          <div class="timer-progress-fill" id="timerProgressFill"></div>
+        </div>
+        <div class="timer-footnote">Uncast votes will automatically count as <strong>Skip</strong> when time expires.</div>
+      </div>
+
+      <!-- Night Incident Summary Banner -->
+      <div id="dayIncidentBanner" class="incident-banner">
+        <div class="incident-icon" id="incidentIcon"><i class="fa-solid fa-skull"></i></div>
+        <div class="incident-details">
+          <h3 id="incidentTitle">Morning Report</h3>
+          <p id="incidentText">Loading night report...</p>
+        </div>
+      </div>
+
+      <!-- Discussion & Voting Container -->
+      <div class="day-interactive-section">
+        
+        <!-- Live Voting / Player Roster -->
+        <div class="voting-container">
+          <div class="section-subtitle">
+            <span>Town Hall: Suspects & Votes</span>
+            <span id="voteCountBadge" class="badge">0 / 0 Voted</span>
+          </div>
+
+          <div id="dayPlayerCardsList" class="day-player-list">
+            <!-- Dynamic player list with Vote buttons -->
+          </div>
+
+          <!-- Skip / No Lynch Option -->
+          <div class="skip-vote-wrap" id="skipVoteWrap">
+            <button id="btnVoteSkip" class="btn btn-subtle btn-block">
+              <i class="fa-solid fa-forward"></i> Vote to Skip / No Execution
+            </button>
+          </div>
+        </div>
+
+        <!-- Host Day Controls -->
+        <div id="hostDayControlPanel" class="host-phase-card hidden mt-4">
+          <div class="d-flex gap-2">
+            <button id="btnStartVotingPhase" class="btn btn-primary flex-1">
+              <i class="fa-solid fa-gavel"></i> Open Voting
+            </button>
+            <button id="btnResolveVoting" class="btn btn-blood flex-1">
+              <i class="fa-solid fa-check"></i> Finalize Elimination
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- VIEW 6: GAME OVER SCREEN                       -->
+    <!-- ============================================== -->
+    <section id="viewGameOver" class="view-panel">
+      <div class="gameover-card" id="gameoverCard">
+        <div class="gameover-trophy" id="winnerIcon">
+          <i class="fa-solid fa-trophy"></i>
+        </div>
+        <h1 class="winner-title" id="winnerText">TOWN WINS!</h1>
+        <p class="winner-subtitle" id="winnerSubtitle">All Mafia members have been brought to justice.</p>
+
+        <!-- Final Reveal Table -->
+        <div class="final-roster-box">
+          <div class="roster-heading">Truth Revealed: Everyone's Roles</div>
+          <div id="finalPlayersList" class="final-players-grid">
+            <!-- Dynamic Final Roles -->
+          </div>
+        </div>
+
+        <!-- Play Again & Exit -->
+        <div class="gameover-actions mt-4">
+          <button id="btnRestartGame" class="btn btn-gold btn-large btn-block mb-2">
+            <i class="fa-solid fa-rotate-right"></i> Play Another Round
+          </button>
+          <button id="btnExitGameOver" class="btn btn-subtle btn-block" onclick="leaveGameRoom()">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i> Exit to Main Menu
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Notification Toast -->
+    <div id="toastNotification" class="toast-popup"></div>
+
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
