@@ -171,7 +171,12 @@ const DOM = {
   voteCountBadge: document.getElementById('voteCountBadge'),
   skipVoteWrap: document.getElementById('skipVoteWrap'),
   btnVoteSkip: document.getElementById('btnVoteSkip'),
-
+  hostDayControlBar: document.getElementById('hostDayControlBar'),
+  btnFinalizeDayVotes: document.getElementById('btnFinalizeDayVotes'),
+  dayVerdictBanner: document.getElementById('dayVerdictBanner'),
+  verdictHeadline: document.getElementById('verdictHeadline'),
+  verdictDetails: document.getElementById('verdictDetails'),
+  verdictCountdown: document.getElementById('verdictCountdown'),
 
   // Game Over
   winnerText: document.getElementById('winnerText'),
@@ -391,6 +396,15 @@ DOM.btnResolveNight.addEventListener('click', () => {
   sfx.playClick();
   socket.emit('resolve_night');
 });
+
+// Finalize Day Votes (Host)
+if (DOM.btnFinalizeDayVotes) {
+  DOM.btnFinalizeDayVotes.addEventListener('click', () => {
+    sfx.playClick();
+    socket.emit('resolve_voting');
+    showToast('Finalizing votes...');
+  });
+}
 
 
 
@@ -653,6 +667,20 @@ socket.on('day_resolved', (data) => {
   stopVillagerMiniGame();
   sfx.playGavel();
   gameState.players = data.players;
+  renderDayPlayersList();
+
+  if (DOM.dayVerdictBanner) {
+    DOM.dayVerdictBanner.classList.remove('hidden');
+    if (data.executedPlayer) {
+      DOM.verdictHeadline.textContent = `⚖️ ${data.executedPlayer.name} was Eliminated!`;
+      DOM.verdictDetails.textContent = `True role was: ${data.executedPlayer.role}. ${data.voteSummary}`;
+    } else {
+      DOM.verdictHeadline.textContent = `⚖️ No One Eliminated`;
+      DOM.verdictDetails.textContent = data.voteSummary;
+    }
+    DOM.verdictCountdown.textContent = '🌙 Night phase will begin shortly...';
+  }
+
   showToast(data.voteSummary, 5000);
 });
 
@@ -1082,7 +1110,19 @@ function setupDayView(data) {
     }
   }
 
+  // Toggle host day control
+  if (DOM.hostDayControlBar) {
+    if (gameState.isHost) {
+      DOM.hostDayControlBar.classList.remove('hidden');
+    } else {
+      DOM.hostDayControlBar.classList.add('hidden');
+    }
+  }
 
+  // Hide any previous verdict banner
+  if (DOM.dayVerdictBanner) {
+    DOM.dayVerdictBanner.classList.add('hidden');
+  }
 
   gameState.myDayVote = null;
   gameState.votesTally = {};
@@ -1093,6 +1133,12 @@ function renderDayPlayersList() {
   const alivePlayers = gameState.players.filter(p => p.isAlive);
   const myId = gameState.myPlayer ? gameState.myPlayer.id : null;
   const amAlive = gameState.players.some(p => p.id === myId && p.isAlive);
+
+  // Update live vote badge counter
+  const votedCount = Object.keys(gameState.votesTally).length;
+  if (DOM.voteCountBadge) {
+    DOM.voteCountBadge.textContent = `${votedCount} / ${alivePlayers.length} Voted`;
+  }
 
   // Count votes received per target
   const voteCounts = {};

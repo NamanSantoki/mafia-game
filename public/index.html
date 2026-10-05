@@ -314,8 +314,26 @@
               <i class="fa-solid fa-forward"></i> Vote to Skip / No Execution
             </button>
           </div>
+
+          <!-- Host Day Control Bar -->
+          <div id="hostDayControlBar" class="mt-3 hidden">
+            <button id="btnFinalizeDayVotes" class="btn btn-blood btn-block">
+              <i class="fa-solid fa-gavel"></i> Finalize Votes & Proceed to Night (Host)
+            </button>
+          </div>
+
+          <!-- Day Verdict Announcement Banner -->
+          <div id="dayVerdictBanner" class="day-verdict-box hidden">
+            <div class="verdict-icon"><i class="fa-solid fa-gavel"></i></div>
+            <div class="verdict-content">
+              <h3 id="verdictHeadline">Town Hall Verdict</h3>
+              <p id="verdictDetails"></p>
+              <div id="verdictCountdown" class="verdict-countdown">🌙 Next night begins shortly...</div>
+            </div>
+          </div>
         </div>
       </div>
+    </section>
 
     <!-- ============================================== -->
     <!-- VIEW 6: GAME OVER SCREEN                       -->

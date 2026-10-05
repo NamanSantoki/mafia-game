@@ -732,13 +732,26 @@ io.on('connection', (socket) => {
       totalAlive: alivePlayers.length
     });
 
-    // If all alive players have voted, auto-resolve quickly without waiting for full 3 mins!
-    if (Object.keys(room.dayVotes).length >= alivePlayers.length) {
-      setTimeout(() => {
-        if (room.status === 'day_voting') {
-          resolveVoting(room, false);
-        }
-      }, 1500);
+    // Count tallies to see if a strict majority has already been reached
+    const tally = {};
+    Object.values(room.dayVotes).forEach(tId => {
+      tally[tId] = (tally[tId] || 0) + 1;
+    });
+    const maxVotes = Math.max(...Object.values(tally), 0);
+    const majorityThreshold = Math.floor(alivePlayers.length / 2) + 1;
+    const allVoted = Object.keys(room.dayVotes).length >= alivePlayers.length;
+    const hasMajority = maxVotes >= majorityThreshold;
+
+    // Auto-resolve quickly without waiting for full 3 mins!
+    if (allVoted || hasMajority) {
+      if (!room.resolvingVoteTimer) {
+        room.resolvingVoteTimer = setTimeout(() => {
+          room.resolvingVoteTimer = null;
+          if (room.status === 'day_voting') {
+            resolveVoting(room, false);
+          }
+        }, 1200);
+      }
     }
   });
 
@@ -749,6 +762,10 @@ io.on('connection', (socket) => {
     if (room.votingTimer) {
       clearTimeout(room.votingTimer);
       room.votingTimer = null;
+    }
+    if (room.resolvingVoteTimer) {
+      clearTimeout(room.resolvingVoteTimer);
+      room.resolvingVoteTimer = null;
     }
 
     const alivePlayers = room.players.filter(p => p.isAlive);

@@ -1432,3 +1432,48 @@ input:checked + .slider:before { transform: translateX(22px); }
   100% { transform: scale(1); }
 }
 
+/* Day Verdict Announcement Box */
+.day-verdict-box {
+  background: linear-gradient(135deg, rgba(230, 57, 70, 0.2), rgba(20, 20, 25, 0.95));
+  border: 1px solid var(--color-mafia);
+  box-shadow: 0 0 25px rgba(230, 57, 70, 0.35);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+  margin-top: 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  animation: badgePop 0.4s ease;
+}
+
+.day-verdict-box .verdict-icon {
+  font-size: 1.8rem;
+  color: var(--color-mafia);
+  flex-shrink: 0;
+}
+
+.day-verdict-box .verdict-content h3 {
+  font-size: 1.1rem;
+  font-weight: 800;
+  margin-bottom: 4px;
+  color: #fff;
+}
+
+.day-verdict-box .verdict-content p {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+
+.verdict-countdown {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-gold);
+  display: inline-block;
+  background: rgba(255, 209, 102, 0.12);
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+}
+
+
