@@ -1295,3 +1295,140 @@ input:checked + .slider:before { transform: translateX(22px); }
 .flex-1 { flex: 1; }
 .mt-3 { margin-top: 12px; }
 .mt-4 { margin-top: 16px; }
+
+/* ==========================================
+   VILLAGER NIGHT PATROL MINI-GAME
+   ========================================== */
+.vigil-stats-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(244, 162, 97, 0.25);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vigil-stat-item {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.vigil-stat-item strong {
+  color: #fff;
+  font-size: 0.95rem;
+}
+
+.vigil-status-badge {
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  transition: all 0.25s ease;
+}
+
+.vigil-status-badge.waiting {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+}
+
+.vigil-status-badge.active {
+  background: #ffd166;
+  color: #101118;
+  box-shadow: 0 0 12px rgba(255, 209, 102, 0.6);
+  animation: badgePop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.vigil-status-badge.success {
+  background: #06d6a0;
+  color: #101118;
+  box-shadow: 0 0 12px rgba(6, 214, 160, 0.6);
+}
+
+.vigil-status-badge.missed {
+  background: #e63946;
+  color: #fff;
+}
+
+.villager-patrol-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.patrol-target-btn {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.patrol-target-btn.highlighted {
+  border-color: #ffd166 !important;
+  background: linear-gradient(135deg, rgba(255, 209, 102, 0.22), rgba(244, 162, 97, 0.32)) !important;
+  box-shadow: 0 0 22px rgba(255, 209, 102, 0.55), inset 0 0 12px rgba(255, 209, 102, 0.3) !important;
+  transform: scale(1.03);
+  animation: patrolGlowPulse 0.9s infinite alternate ease-in-out;
+}
+
+.patrol-target-btn.hit-success {
+  border-color: #06d6a0 !important;
+  background: rgba(6, 214, 160, 0.35) !important;
+  box-shadow: 0 0 26px rgba(6, 214, 160, 0.8) !important;
+  transform: scale(1.04);
+}
+
+.patrol-target-btn.hit-wrong {
+  border-color: #e63946 !important;
+  background: rgba(230, 57, 70, 0.3) !important;
+  animation: patrolShake 0.35s ease;
+}
+
+.patrol-badge {
+  background: #ffd166;
+  color: #101118;
+  font-size: 0.72rem;
+  font-weight: 900;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  letter-spacing: 0.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 0 10px rgba(255, 209, 102, 0.7);
+  animation: patrolBounce 0.45s infinite alternate ease-in-out;
+}
+
+@keyframes patrolGlowPulse {
+  0% {
+    box-shadow: 0 0 14px rgba(255, 209, 102, 0.4), inset 0 0 8px rgba(255, 209, 102, 0.2);
+  }
+  100% {
+    box-shadow: 0 0 28px rgba(255, 209, 102, 0.75), inset 0 0 16px rgba(255, 209, 102, 0.45);
+  }
+}
+
+@keyframes patrolBounce {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-3px) scale(1.05); }
+}
+
+@keyframes patrolShake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
+@keyframes badgePop {
+  0% { transform: scale(0.8); }
+  60% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+

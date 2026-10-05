@@ -480,6 +480,7 @@ socket.on('room_updated', (data) => {
 
 // Game Restarted (Play Another Round)
 socket.on('game_restarted', (data) => {
+  stopVillagerMiniGame();
   sfx.playDayWake();
   gameState.status = 'lobby';
   gameState.myRoleInfo = null;
@@ -504,6 +505,7 @@ socket.on('player_left', (data) => {
 
 // Kicked Notification
 socket.on('kicked', () => {
+  stopVillagerMiniGame();
   window.leaveGameRoom();
   showToast('You were removed from the room.');
 });
@@ -516,6 +518,7 @@ socket.on('role_assigned', (roleData) => {
 
 // Game Started
 socket.on('game_started', (data) => {
+  stopVillagerMiniGame();
   gameState.status = 'role_reveal';
   gameState.players = data.players;
   gameState.dayNumber = data.dayNumber || 1;
@@ -604,6 +607,7 @@ socket.on('phase_changed', (data) => {
     setupNightView();
     showView(DOM.viewNight);
   } else if (data.status === 'day_discussion' || data.status === 'day_voting') {
+    stopVillagerMiniGame();
     sfx.playDayWake();
     setupDayView(data);
     showView(DOM.viewDay);
@@ -643,6 +647,7 @@ socket.on('vote_update', (data) => {
 // Day Resolved
 socket.on('day_resolved', (data) => {
   stopClientTimer();
+  stopVillagerMiniGame();
   sfx.playGavel();
   gameState.players = data.players;
   showToast(data.voteSummary, 5000);
@@ -651,6 +656,7 @@ socket.on('day_resolved', (data) => {
 // Game Over
 socket.on('game_over', (data) => {
   stopClientTimer();
+  stopVillagerMiniGame();
   sfx.playRoleReveal();
   DOM.winnerText.textContent = data.winner === 'Town' ? 'TOWN WINS!' : 'MAFIA WINS!';
   DOM.winnerText.style.color = data.winner === 'Town' ? 'var(--color-doctor)' : 'var(--color-mafia)';
@@ -722,6 +728,7 @@ function renderRoleCard(roleData) {
 // NIGHT PHASE LOGIC & RENDERING
 // ==========================================
 function setupNightView() {
+  stopVillagerMiniGame();
   gameState.myNightTarget = null;
   const role = gameState.myRoleInfo ? gameState.myRoleInfo.role : 'Villager';
 
@@ -738,9 +745,26 @@ function setupNightView() {
   let html = '';
 
   if (role === 'Mafia') {
+    // Show mafia teammates' votes panel for coordination
+    const teammates = (gameState.myRoleInfo && gameState.myRoleInfo.mafiaTeammates) || [];
+    const teamPanel = teammates.length > 0 ? `
+      <div class="mafia-coordination-panel" id="mafiaCoordPanel">
+        <div class="coord-title"><i class="fa-solid fa-handshake"></i> Team Votes</div>
+        <div id="mafiaTeamVotes" class="coord-votes">
+          ${teammates.map(name => `
+            <div class="coord-vote-row">
+              <span class="coord-name">${escapeHtml(name)}</span>
+              <span class="coord-target">Deciding...</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : '';
+
     html = `
       <div class="action-header-text"><i class="fa-solid fa-gun" style="color:var(--color-mafia)"></i> Mafia Night Action</div>
       <p class="action-subtext">Choose an innocent player to eliminate tonight:</p>
+      ${teamPanel}
       <div class="action-target-list">
         ${alivePlayers
           .filter(p => p.id !== myId)
@@ -783,17 +807,231 @@ function setupNightView() {
       <div id="detectiveResultBox" class="investigation-result-card hidden"></div>
     `;
   } else {
+    // Villager gets an interactive reaction mini-game: targets randomly highlight every 1-5s
+    const patrolTargets = alivePlayers.filter(p => p.id !== myId);
     html = `
-      <div class="text-center p-4">
-        <div style="font-size: 3rem; margin-bottom: 12px; color: var(--color-villager);"><i class="fa-solid fa-bed"></i></div>
-        <h3 style="font-family: var(--font-title); margin-bottom: 6px;">You are Asleep</h3>
-        <p class="text-muted">You are a Villager. Keep your eyes closed and stay silent while special roles make their moves.</p>
+      <div class="action-header-text"><i class="fa-solid fa-shield-halved" style="color:var(--color-villager)"></i> Town Patrol Mini-Game</div>
+      <p class="action-subtext">Stay vigilant! Random villagers will highlight every 1–5s. Tap them quickly before they vanish!</p>
+      
+      <div class="vigil-stats-bar">
+        <div class="vigil-stat-item"><i class="fa-solid fa-bolt" style="color:#ffd166"></i> Score: <strong id="villagerScoreVal">0</strong></div>
+        <div class="vigil-stat-item"><i class="fa-solid fa-fire" style="color:#ff6b6b"></i> Streak: <strong id="villagerStreakVal">0</strong></div>
+        <div class="vigil-stat-item"><span id="villagerStatusBadge" class="vigil-status-badge waiting">Watching...</span></div>
+      </div>
+
+      <div class="action-target-list villager-patrol-list" id="villagerPatrolGrid">
+        ${patrolTargets.length > 0 ? patrolTargets.map(p => `
+          <button class="target-btn patrol-target-btn" data-player-id="${p.id}" onclick="handleVillagerPatrolTap('${p.id}', this)">
+            <span class="patrol-name">${escapeHtml(p.name)}</span>
+            <span class="patrol-badge hidden"><i class="fa-solid fa-bolt"></i> TAP!</span>
+            <i class="fa-solid fa-user-shield patrol-icon"></i>
+          </button>
+        `).join('') : `
+          <p style="color:var(--text-muted);font-size:0.9rem;">No other players active to patrol.</p>
+        `}
       </div>
     `;
   }
 
   DOM.nightActionContainer.innerHTML = html;
+
+  if (role === 'Villager') {
+    startVillagerMiniGame();
+  }
 }
+
+// ==========================================
+// VILLAGER NIGHT PATROL MINI-GAME
+// ==========================================
+let villagerMinigame = {
+  activeTimer: null,
+  highlightTimer: null,
+  highlightedId: null,
+  score: 0,
+  streak: 0,
+  isRunning: false
+};
+
+function startVillagerMiniGame() {
+  stopVillagerMiniGame();
+  villagerMinigame.isRunning = true;
+  villagerMinigame.score = 0;
+  villagerMinigame.streak = 0;
+  villagerMinigame.highlightedId = null;
+  updateVillagerStatsUI();
+  scheduleNextVillagerHighlight();
+}
+
+function stopVillagerMiniGame() {
+  villagerMinigame.isRunning = false;
+  if (villagerMinigame.activeTimer) {
+    clearTimeout(villagerMinigame.activeTimer);
+    villagerMinigame.activeTimer = null;
+  }
+  if (villagerMinigame.highlightTimer) {
+    clearTimeout(villagerMinigame.highlightTimer);
+    villagerMinigame.highlightTimer = null;
+  }
+  villagerMinigame.highlightedId = null;
+  document.querySelectorAll('.patrol-target-btn').forEach(btn => {
+    btn.classList.remove('highlighted', 'hit-success', 'hit-wrong');
+    const badge = btn.querySelector('.patrol-badge');
+    if (badge) badge.classList.add('hidden');
+  });
+}
+
+function scheduleNextVillagerHighlight() {
+  if (!villagerMinigame.isRunning) return;
+
+  // Random interval between 1 and 5 seconds (1000ms - 4500ms)
+  const delayMs = Math.floor(Math.random() * 3500) + 1000;
+
+  const statusBadge = document.getElementById('villagerStatusBadge');
+  if (statusBadge) {
+    statusBadge.textContent = 'Watching...';
+    statusBadge.className = 'vigil-status-badge waiting';
+  }
+
+  villagerMinigame.activeTimer = setTimeout(() => {
+    triggerVillagerHighlight();
+  }, delayMs);
+}
+
+function triggerVillagerHighlight() {
+  if (!villagerMinigame.isRunning) return;
+
+  const buttons = Array.from(document.querySelectorAll('.patrol-target-btn'));
+  if (buttons.length === 0) return;
+
+  // Clear existing highlights
+  buttons.forEach(btn => {
+    btn.classList.remove('highlighted', 'hit-success', 'hit-wrong');
+    const badge = btn.querySelector('.patrol-badge');
+    if (badge) badge.classList.add('hidden');
+  });
+
+  // Pick random button
+  const randomIndex = Math.floor(Math.random() * buttons.length);
+  const targetBtn = buttons[randomIndex];
+  const targetId = targetBtn.getAttribute('data-player-id');
+
+  villagerMinigame.highlightedId = targetId;
+  targetBtn.classList.add('highlighted');
+  const badge = targetBtn.querySelector('.patrol-badge');
+  if (badge) badge.classList.remove('hidden');
+
+  const statusBadge = document.getElementById('villagerStatusBadge');
+  if (statusBadge) {
+    statusBadge.textContent = '⚡ TAP NOW!';
+    statusBadge.className = 'vigil-status-badge active';
+  }
+
+  // Active duration before vanishing: 2.2 seconds
+  villagerMinigame.highlightTimer = setTimeout(() => {
+    if (villagerMinigame.highlightedId === targetId) {
+      targetBtn.classList.remove('highlighted');
+      if (badge) badge.classList.add('hidden');
+      villagerMinigame.highlightedId = null;
+      villagerMinigame.streak = 0;
+      updateVillagerStatsUI();
+
+      if (statusBadge) {
+        statusBadge.textContent = 'Missed!';
+        statusBadge.className = 'vigil-status-badge missed';
+      }
+      scheduleNextVillagerHighlight();
+    }
+  }, 2200);
+}
+
+window.handleVillagerPatrolTap = function(playerId, btnEl) {
+  if (!villagerMinigame.isRunning) return;
+
+  const statusBadge = document.getElementById('villagerStatusBadge');
+
+  if (villagerMinigame.highlightedId && villagerMinigame.highlightedId === playerId) {
+    // SUCCESSFUL TAP!
+    if (villagerMinigame.highlightTimer) {
+      clearTimeout(villagerMinigame.highlightTimer);
+      villagerMinigame.highlightTimer = null;
+    }
+    villagerMinigame.highlightedId = null;
+
+    villagerMinigame.streak += 1;
+    const pointsGained = 100 + (villagerMinigame.streak * 20);
+    villagerMinigame.score += pointsGained;
+    updateVillagerStatsUI();
+
+    sfx.playTone(880, 'triangle', 0.1, 0.15);
+    if (navigator.vibrate) {
+      try { navigator.vibrate(30); } catch(e){}
+    }
+
+    btnEl.classList.remove('highlighted');
+    btnEl.classList.add('hit-success');
+    const badge = btnEl.querySelector('.patrol-badge');
+    if (badge) badge.classList.add('hidden');
+
+    if (statusBadge) {
+      statusBadge.textContent = `🎯 +${pointsGained} pts!`;
+      statusBadge.className = 'vigil-status-badge success';
+    }
+
+    setTimeout(() => {
+      btnEl.classList.remove('hit-success');
+    }, 350);
+
+    // Schedule next target in random 1 to 3 seconds
+    const nextDelay = Math.floor(Math.random() * 2000) + 1000;
+    villagerMinigame.activeTimer = setTimeout(() => {
+      triggerVillagerHighlight();
+    }, nextDelay);
+
+  } else {
+    // WRONG TARGET TAP
+    sfx.playTone(220, 'sawtooth', 0.15, 0.15);
+    if (navigator.vibrate) {
+      try { navigator.vibrate([40, 30, 40]); } catch(e){}
+    }
+
+    btnEl.classList.add('hit-wrong');
+    villagerMinigame.streak = 0;
+    updateVillagerStatsUI();
+
+    if (statusBadge) {
+      statusBadge.textContent = '❌ Missed!';
+      statusBadge.className = 'vigil-status-badge missed';
+    }
+
+    setTimeout(() => {
+      btnEl.classList.remove('hit-wrong');
+    }, 350);
+  }
+};
+
+function updateVillagerStatsUI() {
+  const scoreEl = document.getElementById('villagerScoreVal');
+  const streakEl = document.getElementById('villagerStreakVal');
+  if (scoreEl) scoreEl.textContent = villagerMinigame.score;
+  if (streakEl) streakEl.textContent = villagerMinigame.streak;
+}
+
+// Mafia coordination — show live teammate vote updates
+socket.on('mafia_vote_update', (data) => {
+  const panel = document.getElementById('mafiaTeamVotes');
+  if (!panel) return;
+
+  // Update the specific teammate's vote display
+  const rows = panel.querySelectorAll('.coord-vote-row');
+  rows.forEach(row => {
+    const nameEl = row.querySelector('.coord-name');
+    const targetEl = row.querySelector('.coord-target');
+    if (nameEl && nameEl.textContent === data.voterName) {
+      targetEl.textContent = `→ ${data.targetName}`;
+      targetEl.classList.add('voted');
+    }
+  });
+});
 
 window.submitNightTarget = function(targetId, btnEl) {
   sfx.playClick();
