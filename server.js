@@ -110,12 +110,22 @@ function checkWinCondition(room) {
   const aliveMafia = alivePlayers.filter(p => p.role === 'Mafia');
   const aliveTown = alivePlayers.filter(p => p.role !== 'Mafia');
 
+  // Town wins if all Mafia members are dead
   if (aliveMafia.length === 0) {
     return 'Town';
   }
-  if (aliveMafia.length >= aliveTown.length) {
+
+  // Mafia wins if all Town members are dead
+  if (aliveTown.length === 0) {
     return 'Mafia';
   }
+
+  // Mafia wins if they strictly outnumber town (e.g. 2 Mafia vs 1 Town)
+  if (aliveMafia.length > aliveTown.length) {
+    return 'Mafia';
+  }
+
+  // If 1 Mafia vs 1 Town, game continues so Town has the chance to discuss and vote out the Mafia during Day!
   return null;
 }
 
