@@ -4,6 +4,7 @@ const { Server } = require('socket.io');
 const qrcode = require('qrcode');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
@@ -355,16 +356,26 @@ io.on('connection', (socket) => {
       roleDeck.push('Villager');
     }
 
-    // Shuffle roles (Fisher-Yates)
-    for (let i = roleDeck.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [roleDeck[i], roleDeck[j]] = [roleDeck[j], roleDeck[i]];
+    // Cryptographically secure Fisher-Yates shuffle
+    // Uses crypto.randomInt for unbiased randomness so host (player[0]) has no positional bias
+    function secureShuffleArray(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = crypto.randomInt(0, i + 1);
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
     }
 
-    // Assign to players
-    room.players.forEach((player, index) => {
-      player.role = roleDeck[index];
-      player.isAlive = true;
+    secureShuffleArray(roleDeck);
+
+    // Also shuffle a player index mapping so roles aren't always assigned in join order
+    const playerIndices = room.players.map((_, idx) => idx);
+    secureShuffleArray(playerIndices);
+
+    // Assign roles using shuffled indices for double randomization
+    playerIndices.forEach((playerIdx, roleIdx) => {
+      room.players[playerIdx].role = roleDeck[roleIdx];
+      room.players[playerIdx].isAlive = true;
     });
 
     room.status = 'role_reveal';
@@ -456,6 +467,7 @@ io.on('connection', (socket) => {
   });
 
   // 8. Night Action: Detective Investigate
+  // Detective only learns if the target is Mafia or NOT Mafia — no other role info is revealed
   socket.on('detective_action', ({ targetId }) => {
     const room = rooms.get(currentRoomCode);
     if (!room || room.status !== 'night') return;
@@ -467,6 +479,7 @@ io.on('connection', (socket) => {
     const targetPlayer = room.players.find(p => p.id === targetId);
 
     const isMafia = targetPlayer ? (targetPlayer.role === 'Mafia') : false;
+    // Only send binary result: Mafia or Not Mafia — never reveal Doctor/Villager/etc.
     const result = {
       targetId,
       targetName: targetPlayer ? targetPlayer.name : 'Unknown',

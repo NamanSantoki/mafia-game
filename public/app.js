@@ -630,19 +630,19 @@ socket.on('night_actions_progress', (progress) => {
   DOM.checkDetective.className = `check-item ${progress.detectiveSubmitted ? 'done' : ''}`;
 });
 
-// Detective Investigation Result
+// Detective Investigation Result — only reveals Mafia or Not Mafia (no Doctor/Villager identity)
 socket.on('detective_result', (result) => {
   const resultCard = document.getElementById('detectiveResultBox');
   if (resultCard) {
     resultCard.classList.remove('hidden');
     resultCard.innerHTML = `
-      <div>Suspect: <strong>${escapeHtml(result.targetName)}</strong></div>
+      <div>Investigated: <strong>${escapeHtml(result.targetName)}</strong></div>
       <div class="investigation-verdict ${result.isMafia ? 'verdict-mafia' : 'verdict-innocent'}">
-        ${result.isMafia ? '🩸 MAFIA / GUILTY' : '🌿 INNOCENT CITIZEN'}
+        ${result.isMafia ? '⚠️ YES — MAFIA MEMBER!' : '✅ NO — NOT MAFIA'}
       </div>
     `;
   }
-  showToast(`Investigation Complete: ${result.isMafia ? 'MAFIA!' : 'Innocent'}`);
+  showToast(result.isMafia ? '🔴 Mafia found!' : '🟢 Not Mafia');
 });
 
 // Day Vote Update
