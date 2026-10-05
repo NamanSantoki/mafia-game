@@ -409,6 +409,24 @@ io.on('connection', (socket) => {
   });
 
   function enterNightPhase(room) {
+    // Proactive check if game already ended
+    const winner = checkWinCondition(room);
+    if (winner) {
+      room.status = 'game_over';
+      room.winner = winner;
+      io.to(room.code).emit('game_over', {
+        winner,
+        summary: winner === 'Town' ? 'All Mafia members eliminated! Town wins!' : 'Mafia has outnumbered the town! Mafia wins!',
+        players: room.players.map(p => ({
+          name: p.name,
+          role: p.role,
+          isAlive: p.isAlive
+        })),
+        history: room.history
+      });
+      return;
+    }
+
     room.status = 'night';
     room.nightActions = {
       mafiaVotes: {},
@@ -421,6 +439,24 @@ io.on('connection', (socket) => {
   }
 
   function advanceNightStep(room) {
+    // Proactive check if game already ended
+    const winner = checkWinCondition(room);
+    if (winner) {
+      room.status = 'game_over';
+      room.winner = winner;
+      io.to(room.code).emit('game_over', {
+        winner,
+        summary: winner === 'Town' ? 'All Mafia members eliminated! Town wins!' : 'Mafia has outnumbered the town! Mafia wins!',
+        players: room.players.map(p => ({
+          name: p.name,
+          role: p.role,
+          isAlive: p.isAlive
+        })),
+        history: room.history
+      });
+      return;
+    }
+
     const aliveMafia = room.players.filter(p => p.role === 'Mafia' && p.isAlive);
     const aliveDoctor = room.players.filter(p => p.role === 'Doctor' && p.isAlive);
     const aliveDetective = room.players.filter(p => p.role === 'Detective' && p.isAlive);
