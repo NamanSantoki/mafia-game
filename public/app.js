@@ -171,9 +171,7 @@ const DOM = {
   voteCountBadge: document.getElementById('voteCountBadge'),
   skipVoteWrap: document.getElementById('skipVoteWrap'),
   btnVoteSkip: document.getElementById('btnVoteSkip'),
-  hostDayControlPanel: document.getElementById('hostDayControlPanel'),
-  btnStartVotingPhase: document.getElementById('btnStartVotingPhase'),
-  btnResolveVoting: document.getElementById('btnResolveVoting'),
+
 
   // Game Over
   winnerText: document.getElementById('winnerText'),
@@ -394,17 +392,7 @@ DOM.btnResolveNight.addEventListener('click', () => {
   socket.emit('resolve_night');
 });
 
-// Start Day Voting (Host)
-DOM.btnStartVotingPhase.addEventListener('click', () => {
-  sfx.playClick();
-  socket.emit('start_day_voting');
-});
 
-// Resolve Voting (Host)
-DOM.btnResolveVoting.addEventListener('click', () => {
-  sfx.playClick();
-  socket.emit('resolve_voting');
-});
 
 // Skip Day Vote
 DOM.btnVoteSkip.addEventListener('click', () => {
@@ -843,11 +831,7 @@ function setupDayView(data) {
     }
   }
 
-  if (gameState.isHost) {
-    DOM.hostDayControlPanel.classList.remove('hidden');
-  } else {
-    DOM.hostDayControlPanel.classList.add('hidden');
-  }
+
 
   gameState.myDayVote = null;
   gameState.votesTally = {};
