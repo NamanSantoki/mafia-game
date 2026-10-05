@@ -755,6 +755,25 @@ io.on('connection', (socket) => {
       dayNumber: room.dayNumber,
       history: room.history
     });
+
+    // Auto-transition to next night after 5 seconds so players can read the result
+    setTimeout(() => {
+      if (room.status !== 'lobby_between_rounds') return; // guard against manual override or restart
+      room.status = 'night';
+      room.nightActions = {
+        mafiaVotes: {},
+        doctorTarget: null,
+        detectiveTarget: null,
+        detectiveResult: null
+      };
+
+      io.to(room.code).emit('phase_changed', {
+        status: room.status,
+        dayNumber: room.dayNumber,
+        players: getPublicPlayers(room.players),
+        message: '🌙 Night falls. Town goes to sleep. Special roles, take your secret actions.'
+      });
+    }, 5000);
   }
 
   // 12. Host Resolves Voting Manually
