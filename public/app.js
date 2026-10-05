@@ -154,11 +154,6 @@ const DOM = {
 
   // Night
   nightActionContainer: document.getElementById('nightActionContainer'),
-  hostNightControlPanel: document.getElementById('hostNightControlPanel'),
-  btnResolveNight: document.getElementById('btnResolveNight'),
-  checkMafia: document.getElementById('checkMafia'),
-  checkDoctor: document.getElementById('checkDoctor'),
-  checkDetective: document.getElementById('checkDetective'),
 
   // Day
   dayIncidentBanner: document.getElementById('dayIncidentBanner'),
@@ -389,12 +384,6 @@ function flipRoleCard() {
 DOM.btnProceedToNight.addEventListener('click', () => {
   sfx.playClick();
   socket.emit('proceed_to_night');
-});
-
-// Resolve Night (Host)
-DOM.btnResolveNight.addEventListener('click', () => {
-  sfx.playClick();
-  socket.emit('resolve_night');
 });
 
 // Finalize Day Votes (Host)
@@ -631,14 +620,6 @@ socket.on('phase_changed', (data) => {
   }
 });
 
-// Night Actions Progress (Host only)
-socket.on('night_actions_progress', (progress) => {
-  if (!gameState.isHost) return;
-  DOM.checkMafia.className = `check-item ${progress.mafiaCountSubmitted >= progress.mafiaTotal ? 'done' : (progress.nightStep === 'mafia' ? 'active' : '')}`;
-  DOM.checkDoctor.className = `check-item ${progress.doctorSubmitted ? 'done' : (progress.nightStep === 'doctor' ? 'active' : '')}`;
-  DOM.checkDetective.className = `check-item ${progress.detectiveSubmitted ? 'done' : (progress.nightStep === 'detective' ? 'active' : '')}`;
-});
-
 // Detective Investigation Result — only reveals Mafia or Not Mafia (no Doctor/Villager identity)
 socket.on('detective_result', (result) => {
   const resultCard = document.getElementById('detectiveResultBox');
@@ -762,12 +743,6 @@ function setupNightView() {
   stopVillagerMiniGame();
   gameState.myNightTarget = null;
   const role = gameState.myRoleInfo ? gameState.myRoleInfo.role : 'Villager';
-
-  if (gameState.isHost) {
-    DOM.hostNightControlPanel.classList.remove('hidden');
-  } else {
-    DOM.hostNightControlPanel.classList.add('hidden');
-  }
 
   // Alive players
   const alivePlayers = gameState.players.filter(p => p.isAlive);
