@@ -593,17 +593,20 @@ socket.on('voting_timer_start', (data) => {
   startClientTimer(data.durationSeconds, data.endTime);
 });
 
-// Phase Changed (Night / Day)
+/// Phase Changed (Night / Day)
 socket.on('phase_changed', (data) => {
   gameState.status = data.status;
   gameState.dayNumber = data.dayNumber || gameState.dayNumber;
+  if (data.nightStep) gameState.nightStep = data.nightStep;
   if (data.players) gameState.players = data.players;
 
   document.querySelectorAll('.lblDayNum').forEach(el => el.textContent = gameState.dayNumber);
 
   if (data.status === 'night') {
     stopClientTimer();
-    sfx.playNightFall();
+    if (!DOM.viewNight.classList.contains('active')) {
+      sfx.playNightFall();
+    }
     setupNightView();
     showView(DOM.viewNight);
   } else if (data.status === 'day_discussion' || data.status === 'day_voting') {
@@ -617,9 +620,9 @@ socket.on('phase_changed', (data) => {
 // Night Actions Progress (Host only)
 socket.on('night_actions_progress', (progress) => {
   if (!gameState.isHost) return;
-  DOM.checkMafia.className = `check-item ${progress.mafiaCountSubmitted >= progress.mafiaTotal ? 'done' : ''}`;
-  DOM.checkDoctor.className = `check-item ${progress.doctorSubmitted ? 'done' : ''}`;
-  DOM.checkDetective.className = `check-item ${progress.detectiveSubmitted ? 'done' : ''}`;
+  DOM.checkMafia.className = `check-item ${progress.mafiaCountSubmitted >= progress.mafiaTotal ? 'done' : (progress.nightStep === 'mafia' ? 'active' : '')}`;
+  DOM.checkDoctor.className = `check-item ${progress.doctorSubmitted ? 'done' : (progress.nightStep === 'doctor' ? 'active' : '')}`;
+  DOM.checkDetective.className = `check-item ${progress.detectiveSubmitted ? 'done' : (progress.nightStep === 'detective' ? 'active' : '')}`;
 });
 
 // Detective Investigation Result — only reveals Mafia or Not Mafia (no Doctor/Villager identity)
@@ -697,10 +700,10 @@ function renderRoleCard(roleData) {
 
   if (role === 'Mafia') {
     iconHtml = '<i class="fa-solid fa-gun"></i>';
-    teamText = 'Team: Mafia (Evil)';
+    teamText = 'Team: Mafia (Outlaw)';
   } else if (role === 'Doctor') {
     iconHtml = '<i class="fa-solid fa-user-doctor"></i>';
-    teamText = 'Team: Town (Protector)';
+    teamText = 'Team: Town (Healer)';
   } else if (role === 'Detective') {
     iconHtml = '<i class="fa-solid fa-magnifying-glass"></i>';
     teamText = 'Team: Town (Investigator)';
@@ -741,10 +744,20 @@ function setupNightView() {
   // Alive players
   const alivePlayers = gameState.players.filter(p => p.isAlive);
   const myId = gameState.myPlayer ? gameState.myPlayer.id : null;
+  const amAlive = gameState.players.some(p => p.id === myId && p.isAlive);
+
+  // Sequential night turns: 1. Mafia -> 2. Doctor -> 3. Detective
+  const currentStep = gameState.nightStep || 'mafia';
+
+  const isMyTurn = amAlive && (
+    (currentStep === 'mafia' && role === 'Mafia') ||
+    (currentStep === 'doctor' && role === 'Doctor') ||
+    (currentStep === 'detective' && role === 'Detective')
+  );
 
   let html = '';
 
-  if (role === 'Mafia') {
+  if (isMyTurn && role === 'Mafia') {
     // Show mafia teammates' votes panel for coordination
     const teammates = (gameState.myRoleInfo && gameState.myRoleInfo.mafiaTeammates) || [];
     const teamPanel = teammates.length > 0 ? `
@@ -762,7 +775,7 @@ function setupNightView() {
     ` : '';
 
     html = `
-      <div class="action-header-text"><i class="fa-solid fa-gun" style="color:var(--color-mafia)"></i> Mafia Night Action</div>
+      <div class="action-header-text"><i class="fa-solid fa-gun" style="color:var(--color-mafia)"></i> Mafia Night Turn</div>
       <p class="action-subtext">Choose an innocent player to eliminate tonight:</p>
       ${teamPanel}
       <div class="action-target-list">
@@ -776,9 +789,9 @@ function setupNightView() {
           `).join('')}
       </div>
     `;
-  } else if (role === 'Doctor') {
+  } else if (isMyTurn && role === 'Doctor') {
     html = `
-      <div class="action-header-text"><i class="fa-solid fa-user-doctor" style="color:var(--color-doctor)"></i> Doctor Night Action</div>
+      <div class="action-header-text"><i class="fa-solid fa-user-doctor" style="color:var(--color-doctor)"></i> Doctor Night Turn</div>
       <p class="action-subtext">Choose one player to protect with medical aid (you can protect yourself):</p>
       <div class="action-target-list">
         ${alivePlayers
@@ -790,9 +803,9 @@ function setupNightView() {
           `).join('')}
       </div>
     `;
-  } else if (role === 'Detective') {
+  } else if (isMyTurn && role === 'Detective') {
     html = `
-      <div class="action-header-text"><i class="fa-solid fa-magnifying-glass" style="color:var(--color-detective)"></i> Detective Night Action</div>
+      <div class="action-header-text"><i class="fa-solid fa-magnifying-glass" style="color:var(--color-detective)"></i> Detective Night Turn</div>
       <p class="action-subtext">Choose a suspect to secretly investigate their allegiance:</p>
       <div class="action-target-list">
         ${alivePlayers
@@ -807,11 +820,11 @@ function setupNightView() {
       <div id="detectiveResultBox" class="investigation-result-card hidden"></div>
     `;
   } else {
-    // Villager gets an interactive reaction mini-game: targets randomly highlight every 1-5s
+    // Non-active players (Villagers, or roles whose turn hasn't arrived or is finished) play the reflex mini-game
     const patrolTargets = alivePlayers.filter(p => p.id !== myId);
     html = `
-      <div class="action-header-text"><i class="fa-solid fa-shield-halved" style="color:var(--color-villager)"></i> Town Patrol Mini-Game</div>
-      <p class="action-subtext">Stay vigilant! Random villagers will highlight every 1–5s. Tap them quickly before they vanish!</p>
+      <div class="action-header-text"><i class="fa-solid fa-shield-halved" style="color:var(--color-villager)"></i> Town Patrol Reflex Game</div>
+      <p class="action-subtext">Keep watch! Targets highlight randomly every 1–10s. Tap them quickly to stay alert!</p>
       
       <div class="vigil-stats-bar">
         <div class="vigil-stat-item"><i class="fa-solid fa-bolt" style="color:#ffd166"></i> Score: <strong id="villagerScoreVal">0</strong></div>
@@ -835,13 +848,13 @@ function setupNightView() {
 
   DOM.nightActionContainer.innerHTML = html;
 
-  if (role === 'Villager') {
+  if (!isMyTurn) {
     startVillagerMiniGame();
   }
 }
 
 // ==========================================
-// VILLAGER NIGHT PATROL MINI-GAME
+// NIGHT PATROL MINI-GAME (1 - 10 Seconds Random Interval)
 // ==========================================
 let villagerMinigame = {
   activeTimer: null,
@@ -883,8 +896,8 @@ function stopVillagerMiniGame() {
 function scheduleNextVillagerHighlight() {
   if (!villagerMinigame.isRunning) return;
 
-  // Random interval between 1 and 5 seconds (1000ms - 4500ms)
-  const delayMs = Math.floor(Math.random() * 3500) + 1000;
+  // Random interval between 1 and 10 seconds (1000ms - 10000ms)
+  const delayMs = Math.floor(Math.random() * 9000) + 1000;
 
   const statusBadge = document.getElementById('villagerStatusBadge');
   if (statusBadge) {
@@ -926,7 +939,7 @@ function triggerVillagerHighlight() {
     statusBadge.className = 'vigil-status-badge active';
   }
 
-  // Active duration before vanishing: 2.2 seconds
+  // Active duration before vanishing: 2.5 seconds
   villagerMinigame.highlightTimer = setTimeout(() => {
     if (villagerMinigame.highlightedId === targetId) {
       targetBtn.classList.remove('highlighted');
@@ -941,7 +954,7 @@ function triggerVillagerHighlight() {
       }
       scheduleNextVillagerHighlight();
     }
-  }, 2200);
+  }, 2500);
 }
 
 window.handleVillagerPatrolTap = function(playerId, btnEl) {
@@ -981,8 +994,8 @@ window.handleVillagerPatrolTap = function(playerId, btnEl) {
       btnEl.classList.remove('hit-success');
     }, 350);
 
-    // Schedule next target in random 1 to 3 seconds
-    const nextDelay = Math.floor(Math.random() * 2000) + 1000;
+    // Schedule next target in random 1 to 10 seconds
+    const nextDelay = Math.floor(Math.random() * 9000) + 1000;
     villagerMinigame.activeTimer = setTimeout(() => {
       triggerVillagerHighlight();
     }, nextDelay);

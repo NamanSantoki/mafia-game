@@ -405,7 +405,10 @@ io.on('connection', (socket) => {
   socket.on('proceed_to_night', () => {
     const room = rooms.get(currentRoomCode);
     if (!room || room.hostSocketId !== socket.id) return;
+    enterNightPhase(room);
+  });
 
+  function enterNightPhase(room) {
     room.status = 'night';
     room.nightActions = {
       mafiaVotes: {},
@@ -413,19 +416,79 @@ io.on('connection', (socket) => {
       detectiveTarget: null,
       detectiveResult: null
     };
+    room.nightStep = null;
+    advanceNightStep(room);
+  }
 
-    io.to(room.code).emit('phase_changed', {
-      status: room.status,
-      dayNumber: room.dayNumber,
-      players: getPublicPlayers(room.players),
-      message: '🌙 Night falls. Town goes to sleep. Special roles, take your secret actions.'
+  function advanceNightStep(room) {
+    const aliveMafia = room.players.filter(p => p.role === 'Mafia' && p.isAlive);
+    const aliveDoctor = room.players.filter(p => p.role === 'Doctor' && p.isAlive);
+    const aliveDetective = room.players.filter(p => p.role === 'Detective' && p.isAlive);
+
+    let nextStep = null;
+
+    if (!room.nightStep) {
+      if (aliveMafia.length > 0) {
+        nextStep = 'mafia';
+      } else if (aliveDoctor.length > 0) {
+        nextStep = 'doctor';
+      } else if (aliveDetective.length > 0) {
+        nextStep = 'detective';
+      } else {
+        nextStep = 'resolve';
+      }
+    } else if (room.nightStep === 'mafia') {
+      if (aliveDoctor.length > 0) {
+        nextStep = 'doctor';
+      } else if (aliveDetective.length > 0) {
+        nextStep = 'detective';
+      } else {
+        nextStep = 'resolve';
+      }
+    } else if (room.nightStep === 'doctor') {
+      if (aliveDetective.length > 0) {
+        nextStep = 'detective';
+      } else {
+        nextStep = 'resolve';
+      }
+    } else if (room.nightStep === 'detective') {
+      nextStep = 'resolve';
+    }
+
+    if (nextStep === 'resolve') {
+      resolveNightHelper(room);
+    } else {
+      room.nightStep = nextStep;
+      io.to(room.code).emit('phase_changed', {
+        status: 'night',
+        nightStep: room.nightStep,
+        dayNumber: room.dayNumber,
+        players: getPublicPlayers(room.players),
+        message: `🌙 Night Phase: ${room.nightStep.toUpperCase()} Turn`
+      });
+      notifyNightProgress(room);
+    }
+  }
+
+  function notifyNightProgress(room) {
+    const aliveMafia = room.players.filter(p => p.role === 'Mafia' && p.isAlive);
+    const aliveDoctor = room.players.filter(p => p.role === 'Doctor' && p.isAlive);
+    const aliveDetective = room.players.filter(p => p.role === 'Detective' && p.isAlive);
+
+    io.to(room.hostSocketId).emit('night_actions_progress', {
+      nightStep: room.nightStep,
+      mafiaCountSubmitted: Object.keys(room.nightActions.mafiaVotes).length,
+      mafiaTotal: aliveMafia.length,
+      doctorSubmitted: room.nightActions.doctorTarget !== null || aliveDoctor.length === 0,
+      detectiveSubmitted: room.nightActions.detectiveTarget !== null || aliveDetective.length === 0,
+      allReady: false
     });
-  });
+  }
 
   // 6. Night Action: Mafia Target
   socket.on('mafia_action', ({ targetId }) => {
     const room = rooms.get(currentRoomCode);
-    if (!room || room.status !== 'night') return;
+    if (!room || room.status !== 'night' || room.nightStep !== 'mafia') return;
 
     const player = room.players.find(p => p.id === socket.id);
     if (!player || player.role !== 'Mafia' || !player.isAlive) return;
@@ -444,13 +507,22 @@ io.on('connection', (socket) => {
       });
     });
 
-    checkNightActionCompletion(room);
+    notifyNightProgress(room);
+
+    // If all alive mafia submitted votes, auto-advance to doctor after 1 second
+    if (Object.keys(room.nightActions.mafiaVotes).length >= mafiaPlayers.length) {
+      setTimeout(() => {
+        if (room.status === 'night' && room.nightStep === 'mafia') {
+          advanceNightStep(room);
+        }
+      }, 1000);
+    }
   });
 
   // 7. Night Action: Doctor Protect
   socket.on('doctor_action', ({ targetId }) => {
     const room = rooms.get(currentRoomCode);
-    if (!room || room.status !== 'night') return;
+    if (!room || room.status !== 'night' || room.nightStep !== 'doctor') return;
 
     const player = room.players.find(p => p.id === socket.id);
     if (!player || player.role !== 'Doctor' || !player.isAlive) return;
@@ -463,14 +535,21 @@ io.on('connection', (socket) => {
       targetName: targetPlayer ? targetPlayer.name : 'Unknown'
     });
 
-    checkNightActionCompletion(room);
+    notifyNightProgress(room);
+
+    // Auto-advance to detective after 1 second
+    setTimeout(() => {
+      if (room.status === 'night' && room.nightStep === 'doctor') {
+        advanceNightStep(room);
+      }
+    }, 1000);
   });
 
   // 8. Night Action: Detective Investigate
   // Detective only learns if the target is Mafia or NOT Mafia — no other role info is revealed
   socket.on('detective_action', ({ targetId }) => {
     const room = rooms.get(currentRoomCode);
-    if (!room || room.status !== 'night') return;
+    if (!room || room.status !== 'night' || room.nightStep !== 'detective') return;
 
     const player = room.players.find(p => p.id === socket.id);
     if (!player || player.role !== 'Detective' || !player.isAlive) return;
@@ -479,7 +558,6 @@ io.on('connection', (socket) => {
     const targetPlayer = room.players.find(p => p.id === targetId);
 
     const isMafia = targetPlayer ? (targetPlayer.role === 'Mafia') : false;
-    // Only send binary result: Mafia or Not Mafia — never reveal Doctor/Villager/etc.
     const result = {
       targetId,
       targetName: targetPlayer ? targetPlayer.name : 'Unknown',
@@ -488,33 +566,25 @@ io.on('connection', (socket) => {
     room.nightActions.detectiveResult = result;
 
     socket.emit('detective_result', result);
-    checkNightActionCompletion(room);
+    notifyNightProgress(room);
+
+    // Give detective 2.5 seconds to see investigation result, then auto-resolve night to day
+    setTimeout(() => {
+      if (room.status === 'night' && room.nightStep === 'detective') {
+        advanceNightStep(room);
+      }
+    }, 2500);
   });
 
-  // Check if night actions are all submitted
-  function checkNightActionCompletion(room) {
-    const aliveMafia = room.players.filter(p => p.role === 'Mafia' && p.isAlive);
-    const aliveDoctor = room.players.filter(p => p.role === 'Doctor' && p.isAlive);
-    const aliveDetective = room.players.filter(p => p.role === 'Detective' && p.isAlive);
-
-    const mafiaDone = Object.keys(room.nightActions.mafiaVotes).length >= aliveMafia.length;
-    const doctorDone = aliveDoctor.length === 0 || room.nightActions.doctorTarget !== null;
-    const detectiveDone = aliveDetective.length === 0 || room.nightActions.detectiveTarget !== null;
-
-    // Send progress to host
-    io.to(room.hostSocketId).emit('night_actions_progress', {
-      mafiaCountSubmitted: Object.keys(room.nightActions.mafiaVotes).length,
-      mafiaTotal: aliveMafia.length,
-      doctorSubmitted: doctorDone,
-      detectiveSubmitted: detectiveDone,
-      allReady: mafiaDone && doctorDone && detectiveDone
-    });
-  }
-
-  // 9. Host resolves Night / triggers Day
+  // 9. Host resolves Night / triggers Day (Manual fallback)
   socket.on('resolve_night', () => {
     const room = rooms.get(currentRoomCode);
     if (!room || room.hostSocketId !== socket.id || room.status !== 'night') return;
+    resolveNightHelper(room);
+  });
+
+  function resolveNightHelper(room) {
+    if (!room || room.status !== 'night') return;
 
     // Determine Mafia Kill Target (majority vote)
     const votes = Object.values(room.nightActions.mafiaVotes);
@@ -582,14 +652,14 @@ io.on('connection', (socket) => {
       dayNumber: room.dayNumber,
       players: getPublicPlayers(room.players),
       nightSummary,
-      wasSaved: false,
+      wasSaved,
       victimName: wasSaved ? null : (victim ? victim.name : null),
       history: room.history,
       message: '☀️ Town wakes up! You have 3 minutes to discuss and vote. Uncast votes will automatically count as Skip.'
     });
 
     startVotingTimer(room);
-  });
+  }
 
   // Helper to start the 3-minute (180 seconds) voting countdown
   function startVotingTimer(room) {
@@ -759,20 +829,7 @@ io.on('connection', (socket) => {
     // Auto-transition to next night after 5 seconds so players can read the result
     setTimeout(() => {
       if (room.status !== 'lobby_between_rounds') return; // guard against manual override or restart
-      room.status = 'night';
-      room.nightActions = {
-        mafiaVotes: {},
-        doctorTarget: null,
-        detectiveTarget: null,
-        detectiveResult: null
-      };
-
-      io.to(room.code).emit('phase_changed', {
-        status: room.status,
-        dayNumber: room.dayNumber,
-        players: getPublicPlayers(room.players),
-        message: '🌙 Night falls. Town goes to sleep. Special roles, take your secret actions.'
-      });
+      enterNightPhase(room);
     }, 5000);
   }
 
