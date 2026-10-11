@@ -124,6 +124,13 @@ const DOM = {
   cfgMafiaCount: document.getElementById('cfgMafiaCount'),
   cfgDoctor: document.getElementById('cfgDoctor'),
   cfgDetective: document.getElementById('cfgDetective'),
+  cfgBodyguard: document.getElementById('cfgBodyguard'),
+  cfgMayor: document.getElementById('cfgMayor'),
+  cfgGodfather: document.getElementById('cfgGodfather'),
+
+  // God View (host spectator panel)
+  hostGodViewPanel: document.getElementById('hostGodViewPanel'),
+  godViewRolesList: document.getElementById('godViewRolesList'),
 
   // Lobby
   displayRoomCode: document.getElementById('displayRoomCode'),
@@ -308,8 +315,11 @@ DOM.btnCreateRoom.addEventListener('click', () => {
   const mafiaCount = parseInt(DOM.cfgMafiaCount.textContent) || 1;
   const enableDoctor = DOM.cfgDoctor.checked;
   const enableDetective = DOM.cfgDetective.checked;
+  const enableBodyguard = DOM.cfgBodyguard.checked;
+  const enableMayor = DOM.cfgMayor.checked;
+  const enableGodfather = DOM.cfgGodfather.checked;
 
-  socket.emit('create_room', { hostName, mafiaCount, enableDoctor, enableDetective }, (res) => {
+  socket.emit('create_room', { hostName, mafiaCount, enableDoctor, enableDetective, enableBodyguard, enableMayor, enableGodfather }, (res) => {
     if (res.success) {
       gameState.roomCode = res.roomCode;
       gameState.isHost = true;
@@ -515,6 +525,8 @@ socket.on('kicked', () => {
 
 // Role Assignment (Private to this socket)
 socket.on('role_assigned', (roleData) => {
+  // Host is spectator — store role info but don't render a player card
+  if (gameState.isHost) return;
   gameState.myRoleInfo = roleData;
   renderRoleCard(roleData);
 });
@@ -529,13 +541,75 @@ socket.on('game_started', (data) => {
   if (gameState.isHost) {
     DOM.hostProceedNightBar.classList.remove('hidden');
     DOM.playerWaitingNightNotice.classList.add('hidden');
+    // Host sees all roles — but we need the full role list from server
+    // It will arrive via host_all_roles event
+    DOM.hostGodViewPanel.classList.remove('hidden');
+    // Hide the player card scene for host
+    const cardScene = document.querySelector('#viewRoleReveal .card-scene');
+    if (cardScene) cardScene.style.display = 'none';
+    const revealPrompt = document.querySelector('#viewRoleReveal .reveal-prompt');
+    if (revealPrompt) {
+      revealPrompt.querySelector('h2').textContent = 'Game Started — God View';
+      revealPrompt.querySelector('p').textContent = 'You are the Host. Watch over all roles below.';
+    }
   } else {
     DOM.hostProceedNightBar.classList.add('hidden');
     DOM.playerWaitingNightNotice.classList.remove('hidden');
+    DOM.hostGodViewPanel.classList.add('hidden');
+    // Show card scene for players
+    const cardScene = document.querySelector('#viewRoleReveal .card-scene');
+    if (cardScene) cardScene.style.display = '';
   }
 
   showView(DOM.viewRoleReveal);
 });
+
+// Host receives all roles (god mode)
+socket.on('host_all_roles', (allRoles) => {
+  if (!gameState.isHost) return;
+  gameState._allRoles = allRoles; // cache for night/day reuse
+  if (DOM.godViewRolesList) renderGodView(allRoles);
+});
+
+function renderGodView(allRoles) {
+  if (!DOM.godViewRolesList) return;
+  buildGodViewGrid(DOM.godViewRolesList, allRoles);
+}
+
+// Build a mini god-view grid into any container element
+function buildGodViewGrid(containerEl, roles) {
+  containerEl.innerHTML = '';
+  const iconMap = {
+    mafia: 'fa-gun', godfather: 'fa-user-secret', doctor: 'fa-user-doctor',
+    detective: 'fa-magnifying-glass', bodyguard: 'fa-shield-halved',
+    mayor: 'fa-star', villager: 'fa-user'
+  };
+  roles.forEach(p => {
+    const roleKey = (p.role || 'Villager').toLowerCase();
+    const icon = iconMap[roleKey] || 'fa-user';
+    const card = document.createElement('div');
+    card.className = `god-role-card role-${roleKey}`;
+    card.innerHTML = `
+      <div class="god-role-icon"><i class="fa-solid ${icon}"></i></div>
+      <div class="god-role-name">${escapeHtml(p.name)}</div>
+      <div class="god-role-label">${escapeHtml(p.role || 'Villager')}</div>
+      ${!p.isAlive ? '<div class="god-dead-badge"><i class="fa-solid fa-skull"></i> Dead</div>' : ''}
+    `;
+    containerEl.appendChild(card);
+  });
+}
+
+// Render night spectator view for host
+function renderHostSpectatorNight() {
+  DOM.nightActionContainer.innerHTML = `
+    <div class="action-header-text"><i class="fa-solid fa-eye" style="color:var(--text-gold)"></i> Host Spectator Mode</div>
+    <p class="action-subtext">Watching all night actions silently. All roles visible below.</p>
+    <div id="nightGodViewGrid" class="god-roles-grid" style="margin-top:12px;"></div>
+  `;
+  if (gameState._allRoles) {
+    buildGodViewGrid(document.getElementById('nightGodViewGrid'), gameState._allRoles);
+  }
+}
 
 // Timer State Controller
 let timerInterval = null;
@@ -612,6 +686,11 @@ socket.on('phase_changed', (data) => {
     }
     setupNightView();
     showView(DOM.viewNight);
+
+    // Host spectator mode — replace action box with god view
+    if (gameState.isHost && DOM.nightActionContainer) {
+      renderHostSpectatorNight();
+    }
   } else if (data.status === 'day_discussion' || data.status === 'day_voting') {
     stopVillagerMiniGame();
     sfx.playDayWake();
@@ -619,6 +698,7 @@ socket.on('phase_changed', (data) => {
     showView(DOM.viewDay);
   }
 });
+
 
 // Detective Investigation Result — only reveals Mafia or Not Mafia (no Doctor/Villager identity)
 socket.on('detective_result', (result) => {
@@ -710,12 +790,21 @@ function renderRoleCard(roleData) {
   if (role === 'Mafia') {
     iconHtml = '<i class="fa-solid fa-gun"></i>';
     teamText = 'Team: Mafia (Outlaw)';
+  } else if (role === 'Godfather') {
+    iconHtml = '<i class="fa-solid fa-user-secret"></i>';
+    teamText = 'Team: Mafia (Boss)';
   } else if (role === 'Doctor') {
     iconHtml = '<i class="fa-solid fa-user-doctor"></i>';
     teamText = 'Team: Town (Healer)';
   } else if (role === 'Detective') {
     iconHtml = '<i class="fa-solid fa-magnifying-glass"></i>';
     teamText = 'Team: Town (Investigator)';
+  } else if (role === 'Bodyguard') {
+    iconHtml = '<i class="fa-solid fa-shield-halved"></i>';
+    teamText = 'Team: Town (Protector)';
+  } else if (role === 'Mayor') {
+    iconHtml = '<i class="fa-solid fa-star"></i>';
+    teamText = 'Team: Town (Leader)';
   }
 
   DOM.roleIconContainer.innerHTML = iconHtml;
@@ -724,7 +813,7 @@ function renderRoleCard(roleData) {
   DOM.roleDescriptionText.textContent = roleData.description;
 
   // Mafia Teammates
-  if (role === 'Mafia') {
+  if (role === 'Mafia' || role === 'Godfather') {
     DOM.mafiaTeammatesBox.classList.remove('hidden');
     if (roleData.mafiaTeammates && roleData.mafiaTeammates.length > 0) {
       DOM.mafiaAlliesList.textContent = roleData.mafiaTeammates.join(', ');
@@ -749,18 +838,19 @@ function setupNightView() {
   const myId = gameState.myPlayer ? gameState.myPlayer.id : null;
   const amAlive = gameState.players.some(p => p.id === myId && p.isAlive);
 
-  // Sequential night turns: 1. Mafia -> 2. Doctor -> 3. Detective
+  // Sequential night turns: 1. Mafia/Godfather -> 2. Doctor -> 3. Detective -> 4. Bodyguard
   const currentStep = gameState.nightStep || 'mafia';
 
   const isMyTurn = amAlive && (
-    (currentStep === 'mafia' && role === 'Mafia') ||
+    (currentStep === 'mafia' && (role === 'Mafia' || role === 'Godfather')) ||
     (currentStep === 'doctor' && role === 'Doctor') ||
-    (currentStep === 'detective' && role === 'Detective')
+    (currentStep === 'detective' && role === 'Detective') ||
+    (currentStep === 'bodyguard' && role === 'Bodyguard')
   );
 
   let html = '';
 
-  if (isMyTurn && role === 'Mafia') {
+  if (isMyTurn && (role === 'Mafia' || role === 'Godfather')) {
     // Show mafia teammates' votes panel for coordination
     const teammates = (gameState.myRoleInfo && gameState.myRoleInfo.mafiaTeammates) || [];
     const teamPanel = teammates.length > 0 ? `
@@ -821,6 +911,21 @@ function setupNightView() {
           `).join('')}
       </div>
       <div id="detectiveResultBox" class="investigation-result-card hidden"></div>
+    `;
+  } else if (isMyTurn && role === 'Bodyguard') {
+    html = `
+      <div class="action-header-text"><i class="fa-solid fa-shield-halved" style="color:var(--color-bodyguard)"></i> Bodyguard Night Turn</div>
+      <p class="action-subtext">Choose one player to guard tonight. If the Mafia targets them, you take the hit instead:</p>
+      <div class="action-target-list">
+        ${alivePlayers
+          .filter(p => p.id !== myId)
+          .map(p => `
+            <button class="target-btn" onclick="submitNightTarget('${p.id}', this)">
+              <span>${escapeHtml(p.name)}</span>
+              <i class="fa-solid fa-shield-heart"></i>
+            </button>
+          `).join('')}
+      </div>
     `;
   } else {
     // Non-active players (Villagers, or roles whose turn hasn't arrived or is finished) play the reflex mini-game
@@ -1058,7 +1163,7 @@ window.submitNightTarget = function(targetId, btnEl) {
 
   gameState.myNightTarget = targetId;
 
-  if (role === 'Mafia') {
+  if (role === 'Mafia' || role === 'Godfather') {
     socket.emit('mafia_action', { targetId });
     showToast('Mafia target marked');
   } else if (role === 'Doctor') {
@@ -1066,6 +1171,9 @@ window.submitNightTarget = function(targetId, btnEl) {
     showToast('Doctor protection assigned');
   } else if (role === 'Detective') {
     socket.emit('detective_action', { targetId });
+  } else if (role === 'Bodyguard') {
+    socket.emit('bodyguard_action', { targetId });
+    showToast('Bodyguard protection assigned');
   }
 };
 

@@ -107,10 +107,10 @@ function getPublicPlayers(players) {
 // Helper to check win conditions
 function checkWinCondition(room) {
   const alivePlayers = room.players.filter(p => p.isAlive);
-  const aliveMafia = alivePlayers.filter(p => p.role === 'Mafia');
-  const aliveTown = alivePlayers.filter(p => p.role !== 'Mafia');
+  const aliveMafia = alivePlayers.filter(p => p.role === 'Mafia' || p.role === 'Godfather');
+  const aliveTown = alivePlayers.filter(p => p.role !== 'Mafia' && p.role !== 'Godfather' && p.role !== 'Host');
 
-  // Town wins if all Mafia members are dead
+  // Town wins if all Mafia/Godfather members are dead
   if (aliveMafia.length === 0) {
     return 'Town';
   }
@@ -140,7 +140,7 @@ io.on('connection', (socket) => {
   let currentRoomCode = null;
 
   // 1. Create Room (Host)
-  socket.on('create_room', ({ hostName, mafiaCount = 1, enableDoctor = true, enableDetective = true }, callback) => {
+  socket.on('create_room', ({ hostName, mafiaCount = 1, enableDoctor = true, enableDetective = true, enableBodyguard = false, enableMayor = false, enableGodfather = false }, callback) => {
     let code = generateRoomCode();
     while (rooms.has(code)) {
       code = generateRoomCode();
@@ -162,6 +162,9 @@ io.on('connection', (socket) => {
         mafiaCount: parseInt(mafiaCount) || 1,
         doctorCount: enableDoctor ? 1 : 0,
         detectiveCount: enableDetective ? 1 : 0,
+        bodyguardCount: enableBodyguard ? 1 : 0,
+        mayorCount: enableMayor ? 1 : 0,
+        godfatherEnabled: enableGodfather || false,
         discussionTimeSeconds: 90
       },
       status: 'lobby',
@@ -309,15 +312,16 @@ io.on('connection', (socket) => {
 
   // Helper for private role info for a given player
   function getPrivateRoleData(room, player) {
+    const isMafiaTeam = player.role === 'Mafia' || player.role === 'Godfather';
     const mafiaTeammates = room.players
-      .filter(p => p.role === 'Mafia' && p.id !== player.id)
+      .filter(p => (p.role === 'Mafia' || p.role === 'Godfather') && p.id !== player.id)
       .map(p => p.name);
 
     return {
       role: player.role,
       name: player.name,
       isAlive: player.isAlive,
-      mafiaTeammates: player.role === 'Mafia' ? mafiaTeammates : [],
+      mafiaTeammates: isMafiaTeam ? mafiaTeammates : [],
       description: getRoleDescription(player.role)
     };
   }
@@ -326,10 +330,16 @@ io.on('connection', (socket) => {
     switch (role) {
       case 'Mafia':
         return 'You are the Mafia. Coordinate secretly with your fellow mafia members at night to eliminate town members.';
+      case 'Godfather':
+        return 'You are the Godfather — the Mafia boss. You appear Innocent to the Detective, making you nearly untouchable. Coordinate with your Mafia team to eliminate the town.';
       case 'Doctor':
         return 'You are the Doctor. Each night, choose one player to protect with your medical kit. If attacked, they will survive!';
       case 'Detective':
         return 'You are the Detective. Each night, investigate one suspect to discover their true loyalty (Mafia or Innocent).';
+      case 'Bodyguard':
+        return 'You are the Bodyguard. Each night, choose one player to protect. If the Mafia targets them, you take the bullet — sacrificing yourself to save them!';
+      case 'Mayor':
+        return 'You are the Mayor. Your voice carries extra weight — your vote counts double during town executions. Use this power wisely to root out the Mafia!';
       case 'Villager':
       default:
         return 'You are an Innocent Villager. You have no special night abilities, but your voice and vote are vital to finding and hanging the Mafia!';
@@ -341,15 +351,20 @@ io.on('connection', (socket) => {
     const room = rooms.get(currentRoomCode);
     if (!room || room.hostSocketId !== socket.id) return;
 
-    const total = room.players.length;
+    // Separate playable players (exclude host — host is spectator/god)
+    const playablePlayers = room.players.filter(p => !p.isHost);
+    const total = playablePlayers.length;
     let mafiaReq = room.settings.mafiaCount;
     let docReq = room.settings.doctorCount;
     let detReq = room.settings.detectiveCount;
+    let bgReq = room.settings.bodyguardCount || 0;
+    let mayorReq = room.settings.mayorCount || 0;
+    const godfatherEnabled = room.settings.godfatherEnabled || false;
 
     // Validation
-    const specialTotal = mafiaReq + docReq + detReq;
+    const specialTotal = mafiaReq + docReq + detReq + bgReq + mayorReq;
     if (total < 3) {
-      if (typeof callback === 'function') callback({ success: false, message: 'Need at least 3 players to start.' });
+      if (typeof callback === 'function') callback({ success: false, message: 'Need at least 3 players (not counting host) to start.' });
       return;
     }
     if (specialTotal > total) {
@@ -362,12 +377,13 @@ io.on('connection', (socket) => {
     for (let i = 0; i < mafiaReq; i++) roleDeck.push('Mafia');
     for (let i = 0; i < docReq; i++) roleDeck.push('Doctor');
     for (let i = 0; i < detReq; i++) roleDeck.push('Detective');
+    for (let i = 0; i < bgReq; i++) roleDeck.push('Bodyguard');
+    for (let i = 0; i < mayorReq; i++) roleDeck.push('Mayor');
     while (roleDeck.length < total) {
       roleDeck.push('Villager');
     }
 
     // Cryptographically secure Fisher-Yates shuffle
-    // Uses crypto.randomInt for unbiased randomness so host (player[0]) has no positional bias
     function secureShuffleArray(arr) {
       for (let i = arr.length - 1; i > 0; i--) {
         const j = crypto.randomInt(0, i + 1);
@@ -378,26 +394,54 @@ io.on('connection', (socket) => {
 
     secureShuffleArray(roleDeck);
 
-    // Also shuffle a player index mapping so roles aren't always assigned in join order
-    const playerIndices = room.players.map((_, idx) => idx);
+    // Shuffle player indices for double randomization (only playable players)
+    const playerIndices = playablePlayers.map((_, idx) => idx);
     secureShuffleArray(playerIndices);
 
-    // Assign roles using shuffled indices for double randomization
+    // Assign roles using shuffled indices
     playerIndices.forEach((playerIdx, roleIdx) => {
-      room.players[playerIdx].role = roleDeck[roleIdx];
-      room.players[playerIdx].isAlive = true;
+      playablePlayers[playerIdx].role = roleDeck[roleIdx];
+      playablePlayers[playerIdx].isAlive = true;
     });
+
+    // If Godfather is enabled, upgrade one random Mafia member to Godfather
+    if (godfatherEnabled) {
+      const mafiaPlayers = playablePlayers.filter(p => p.role === 'Mafia');
+      if (mafiaPlayers.length > 0) {
+        const godfatherIdx = crypto.randomInt(0, mafiaPlayers.length);
+        mafiaPlayers[godfatherIdx].role = 'Godfather';
+      }
+    }
+
+    // Host has no role — they are spectator
+    const hostPlayer = room.players.find(p => p.isHost);
+    if (hostPlayer) {
+      hostPlayer.role = 'Host';
+      hostPlayer.isAlive = false; // host doesn't participate in game mechanics
+    }
 
     room.status = 'role_reveal';
     room.dayNumber = 1;
-    room.history = [`Game started with ${total} players.`];
+    room.history = [`Game started with ${total} playable players.`];
     room.winner = null;
 
-    // Send secret role to each player socket individually
+    // Send secret role to each playable player socket individually
     room.players.forEach(player => {
+      if (player.isHost) return; // host gets god view instead
       const roleData = getPrivateRoleData(room, player);
       io.to(player.id).emit('role_assigned', roleData);
     });
+
+    // Send all roles to host (god view)
+    const allRolesForHost = playablePlayers.map(p => ({
+      id: p.id,
+      name: p.name,
+      role: p.role,
+      isAlive: p.isAlive
+    }));
+    if (hostPlayer) {
+      io.to(hostPlayer.id).emit('host_all_roles', allRolesForHost);
+    }
 
     // Public room update
     io.to(room.code).emit('game_started', {
@@ -441,6 +485,7 @@ io.on('connection', (socket) => {
     room.nightActions = {
       mafiaVotes: {},
       doctorTarget: null,
+      bodyguardTarget: null,
       detectiveTarget: null,
       detectiveResult: null
     };
@@ -467,9 +512,10 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const aliveMafia = room.players.filter(p => p.role === 'Mafia' && p.isAlive);
+    const aliveMafia = room.players.filter(p => (p.role === 'Mafia' || p.role === 'Godfather') && p.isAlive);
     const aliveDoctor = room.players.filter(p => p.role === 'Doctor' && p.isAlive);
     const aliveDetective = room.players.filter(p => p.role === 'Detective' && p.isAlive);
+    const aliveBodyguard = room.players.filter(p => p.role === 'Bodyguard' && p.isAlive);
 
     let nextStep = null;
 
@@ -494,10 +540,18 @@ io.on('connection', (socket) => {
     } else if (room.nightStep === 'doctor') {
       if (aliveDetective.length > 0) {
         nextStep = 'detective';
+      } else if (aliveBodyguard.length > 0) {
+        nextStep = 'bodyguard';
       } else {
         nextStep = 'resolve';
       }
     } else if (room.nightStep === 'detective') {
+      if (aliveBodyguard.length > 0) {
+        nextStep = 'bodyguard';
+      } else {
+        nextStep = 'resolve';
+      }
+    } else if (room.nightStep === 'bodyguard') {
       nextStep = 'resolve';
     }
 
@@ -517,9 +571,10 @@ io.on('connection', (socket) => {
   }
 
   function notifyNightProgress(room) {
-    const aliveMafia = room.players.filter(p => p.role === 'Mafia' && p.isAlive);
+    const aliveMafia = room.players.filter(p => (p.role === 'Mafia' || p.role === 'Godfather') && p.isAlive);
     const aliveDoctor = room.players.filter(p => p.role === 'Doctor' && p.isAlive);
     const aliveDetective = room.players.filter(p => p.role === 'Detective' && p.isAlive);
+    const aliveBodyguard = room.players.filter(p => p.role === 'Bodyguard' && p.isAlive);
 
     io.to(room.hostSocketId).emit('night_actions_progress', {
       nightStep: room.nightStep,
@@ -527,22 +582,23 @@ io.on('connection', (socket) => {
       mafiaTotal: aliveMafia.length,
       doctorSubmitted: room.nightActions.doctorTarget !== null || aliveDoctor.length === 0,
       detectiveSubmitted: room.nightActions.detectiveTarget !== null || aliveDetective.length === 0,
+      bodyguardSubmitted: room.nightActions.bodyguardTarget !== null || aliveBodyguard.length === 0,
       allReady: false
     });
   }
 
-  // 6. Night Action: Mafia Target
+  // 6. Night Action: Mafia Target (Godfather also participates)
   socket.on('mafia_action', ({ targetId }) => {
     const room = rooms.get(currentRoomCode);
     if (!room || room.status !== 'night' || room.nightStep !== 'mafia') return;
 
     const player = room.players.find(p => p.id === socket.id);
-    if (!player || player.role !== 'Mafia' || !player.isAlive) return;
+    if (!player || (player.role !== 'Mafia' && player.role !== 'Godfather') || !player.isAlive) return;
 
     room.nightActions.mafiaVotes[socket.id] = targetId;
 
-    // Broadcast mafia vote status to all Mafia members
-    const mafiaPlayers = room.players.filter(p => p.role === 'Mafia' && p.isAlive);
+    // Broadcast mafia vote status to all Mafia/Godfather members
+    const mafiaPlayers = room.players.filter(p => (p.role === 'Mafia' || p.role === 'Godfather') && p.isAlive);
     const targetPlayer = room.players.find(p => p.id === targetId);
 
     mafiaPlayers.forEach(m => {
@@ -603,6 +659,7 @@ io.on('connection', (socket) => {
     room.nightActions.detectiveTarget = targetId;
     const targetPlayer = room.players.find(p => p.id === targetId);
 
+    // Godfather appears Innocent to Detective (that's their special power)
     const isMafia = targetPlayer ? (targetPlayer.role === 'Mafia') : false;
     const result = {
       targetId,
@@ -620,6 +677,32 @@ io.on('connection', (socket) => {
         advanceNightStep(room);
       }
     }, 2500);
+  });
+
+  // 9.5 Night Action: Bodyguard Protect
+  socket.on('bodyguard_action', ({ targetId }) => {
+    const room = rooms.get(currentRoomCode);
+    if (!room || room.status !== 'night' || room.nightStep !== 'bodyguard') return;
+
+    const player = room.players.find(p => p.id === socket.id);
+    if (!player || player.role !== 'Bodyguard' || !player.isAlive) return;
+
+    room.nightActions.bodyguardTarget = targetId;
+    const targetPlayer = room.players.find(p => p.id === targetId);
+
+    socket.emit('bodyguard_confirmed', {
+      targetId,
+      targetName: targetPlayer ? targetPlayer.name : 'Unknown'
+    });
+
+    notifyNightProgress(room);
+
+    // Auto-advance after 1 second
+    setTimeout(() => {
+      if (room.status === 'night' && room.nightStep === 'bodyguard') {
+        advanceNightStep(room);
+      }
+    }, 1000);
   });
 
   // 9. Host resolves Night / triggers Day (Manual fallback)
@@ -648,20 +731,32 @@ io.on('connection', (socket) => {
     }
 
     const doctorProtectedId = room.nightActions.doctorTarget;
+    const bodyguardProtectedId = room.nightActions.bodyguardTarget;
     let victim = null;
     let wasSaved = false;
+    let bodyguardDied = false;
 
     if (targetKilledId) {
       victim = room.players.find(p => p.id === targetKilledId);
       if (victim && targetKilledId === doctorProtectedId) {
+        // Doctor saves the target
         wasSaved = true;
+      } else if (victim && targetKilledId === bodyguardProtectedId) {
+        // Bodyguard intercepts — bodyguard dies instead
+        wasSaved = true;
+        bodyguardDied = true;
+        const bodyguard = room.players.find(p => p.role === 'Bodyguard' && p.isAlive);
+        if (bodyguard) bodyguard.isAlive = false;
       } else if (victim) {
         victim.isAlive = false;
       }
     }
 
     let nightSummary = '';
-    if (wasSaved && victim) {
+    if (bodyguardDied) {
+      const bg = room.players.find(p => p.role === 'Bodyguard');
+      nightSummary = `🛡️ The Bodyguard${bg ? ` (${bg.name})` : ''} intercepted the Mafia's attack on ${victim ? victim.name : 'their target'} and sacrificed their life!`;
+    } else if (wasSaved && victim) {
       nightSummary = `🕊️ It was a quiet night. No one died tonight!`;
     } else if (victim) {
       nightSummary = `🩸 ${victim.name} was attacked and eliminated by the Mafia during the night!`;
@@ -670,6 +765,15 @@ io.on('connection', (socket) => {
     }
 
     room.history.push(`Night ${room.dayNumber}: ${nightSummary}`);
+
+    // Re-emit host_all_roles so god view stays live with updated alive status
+    const hostPlayer = room.players.find(p => p.isHost);
+    if (hostPlayer) {
+      const updatedRoles = room.players.filter(p => !p.isHost).map(p => ({
+        id: p.id, name: p.name, role: p.role, isAlive: p.isAlive
+      }));
+      io.to(hostPlayer.id).emit('host_all_roles', updatedRoles);
+    }
 
     // Check Win Condition
     const winner = checkWinCondition(room);

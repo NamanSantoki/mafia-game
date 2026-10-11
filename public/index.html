@@ -111,6 +111,41 @@
               <span class="slider"></span>
             </label>
           </div>
+
+          <div class="config-row">
+            <div class="config-label">
+              <span class="role-pill bodyguard"><i class="fa-solid fa-shield-halved"></i> Bodyguard (1)</span>
+              <small class="helper-text">Sacrifices self to save a target from Mafia</small>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="cfgBodyguard">
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="config-row">
+            <div class="config-label">
+              <span class="role-pill mayor"><i class="fa-solid fa-star"></i> Mayor (1)</span>
+              <small class="helper-text">Has 2 votes during town executions</small>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="cfgMayor">
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="config-section-divider">Mafia Roles</div>
+
+          <div class="config-row">
+            <div class="config-label">
+              <span class="role-pill godfather"><i class="fa-solid fa-user-secret"></i> Godfather</span>
+              <small class="helper-text">1 Mafia appears Innocent to Detective</small>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="cfgGodfather">
+              <span class="slider"></span>
+            </label>
+          </div>
         </div>
 
         <button id="btnCreateRoom" class="btn btn-gold btn-block">
@@ -222,6 +257,18 @@
               <i class="fa-solid fa-eye-slash"></i> Hide Card Again
             </button>
           </div>
+        </div>
+      </div>
+
+      <!-- Host God Mode Panel (only visible to host) -->
+      <div id="hostGodViewPanel" class="god-view-panel hidden">
+        <div class="god-view-header">
+          <i class="fa-solid fa-eye"></i>
+          <span>God View — All Player Roles</span>
+          <span class="god-badge">HOST ONLY</span>
+        </div>
+        <div id="godViewRolesList" class="god-roles-grid">
+          <!-- dynamically filled -->
         </div>
       </div>
 

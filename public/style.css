@@ -19,6 +19,11 @@
   --color-detective-glow: rgba(72, 202, 228, 0.4);
   --color-villager: #f4a261;
   --color-villager-glow: rgba(244, 162, 97, 0.3);
+  --color-bodyguard: #7bc8f0;
+  --color-bodyguard-glow: rgba(123, 200, 240, 0.35);
+  --color-mayor: #ffd166;
+  --color-godfather: #c77dff;
+  --color-godfather-glow: rgba(199, 125, 255, 0.4);
 
   --font-title: 'Cinzel', serif;
   --font-body: 'Plus Jakarta Sans', sans-serif;
@@ -411,11 +416,143 @@ body {
 .role-pill.mafia { color: var(--color-mafia); }
 .role-pill.doctor { color: var(--color-doctor); }
 .role-pill.detective { color: var(--color-detective); }
+.role-pill.bodyguard { color: #7bc8f0; }
+.role-pill.mayor { color: #ffd166; }
+.role-pill.godfather { color: #c77dff; }
+
+/* Config section divider */
+.config-section-divider {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--color-mafia);
+  padding: 10px 0 4px;
+  border-top: 1px solid rgba(230, 57, 70, 0.2);
+  margin-top: 6px;
+}
 
 .helper-text {
   font-size: 0.75rem;
   color: var(--text-muted);
 }
+
+/* ================================================================ */
+/* GOD VIEW PANEL (Host Spectator Mode)                              */
+/* ================================================================ */
+.god-view-panel {
+  background: rgba(255, 215, 0, 0.04);
+  border: 1px solid rgba(255, 215, 0, 0.2);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.god-view-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-gold);
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin-bottom: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.god-badge {
+  margin-left: auto;
+  background: rgba(255, 209, 102, 0.15);
+  border: 1px solid rgba(255, 209, 102, 0.3);
+  color: var(--text-gold);
+  font-size: 0.65rem;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  letter-spacing: 1px;
+}
+
+.god-roles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px;
+}
+
+.god-role-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 12px 8px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+  transition: transform 0.2s ease;
+}
+
+.god-role-card:hover { transform: translateY(-2px); }
+
+.god-role-icon {
+  font-size: 1.4rem;
+}
+
+.god-role-name {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #fff;
+  word-break: break-word;
+}
+
+.god-role-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: var(--radius-full);
+  background: rgba(255,255,255,0.08);
+}
+
+.god-dead-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 0.6rem;
+  color: var(--color-mafia);
+  background: rgba(230, 57, 70, 0.15);
+  border-radius: var(--radius-full);
+  padding: 2px 5px;
+}
+
+/* Role colour theming for god cards */
+.god-role-card.role-mafia { border-color: rgba(230, 57, 70, 0.4); }
+.god-role-card.role-mafia .god-role-icon { color: var(--color-mafia); }
+.god-role-card.role-mafia .god-role-label { color: var(--color-mafia); }
+
+.god-role-card.role-godfather { border-color: rgba(199, 125, 255, 0.4); }
+.god-role-card.role-godfather .god-role-icon { color: #c77dff; }
+.god-role-card.role-godfather .god-role-label { color: #c77dff; }
+
+.god-role-card.role-doctor { border-color: rgba(6, 214, 160, 0.4); }
+.god-role-card.role-doctor .god-role-icon { color: var(--color-doctor); }
+.god-role-card.role-doctor .god-role-label { color: var(--color-doctor); }
+
+.god-role-card.role-detective { border-color: rgba(72, 202, 228, 0.4); }
+.god-role-card.role-detective .god-role-icon { color: var(--color-detective); }
+.god-role-card.role-detective .god-role-label { color: var(--color-detective); }
+
+.god-role-card.role-bodyguard { border-color: rgba(123, 200, 240, 0.4); }
+.god-role-card.role-bodyguard .god-role-icon { color: #7bc8f0; }
+.god-role-card.role-bodyguard .god-role-label { color: #7bc8f0; }
+
+.god-role-card.role-mayor { border-color: rgba(255, 209, 102, 0.4); }
+.god-role-card.role-mayor .god-role-icon { color: var(--text-gold); }
+.god-role-card.role-mayor .god-role-label { color: var(--text-gold); }
+
+.god-role-card.role-villager { border-color: rgba(244, 162, 97, 0.3); }
+.god-role-card.role-villager .god-role-icon { color: var(--color-villager); }
+.god-role-card.role-villager .god-role-label { color: var(--color-villager); }
 
 .counter-control {
   display: flex;
@@ -480,6 +617,16 @@ body {
 
 input:checked + .slider { background-color: var(--color-doctor); }
 input:checked + .slider:before { transform: translateX(22px); }
+
+/* Role card backs for new roles */
+.card-back.role-godfather { background: linear-gradient(135deg, #2a0a3e 0%, #1a0525 100%); border-color: var(--color-godfather); box-shadow: 0 0 30px var(--color-godfather-glow); }
+.card-back.role-godfather .card-role-icon { color: var(--color-godfather); }
+
+.card-back.role-bodyguard { background: linear-gradient(135deg, #0a2038 0%, #051525 100%); border-color: var(--color-bodyguard); box-shadow: 0 0 30px var(--color-bodyguard-glow); }
+.card-back.role-bodyguard .card-role-icon { color: var(--color-bodyguard); }
+
+.card-back.role-mayor { background: linear-gradient(135deg, #2a2000 0%, #1a1200 100%); border-color: var(--color-mayor); box-shadow: 0 0 30px rgba(255, 209, 102, 0.4); }
+.card-back.role-mayor .card-role-icon { color: var(--color-mayor); }
 
 /* ======================================================== */
 /* LOBBY VIEW                                               */
