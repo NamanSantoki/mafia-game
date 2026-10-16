@@ -126,6 +126,8 @@ const DOM = {
   cfgDetective: document.getElementById('cfgDetective'),
   cfgBodyguard: document.getElementById('cfgBodyguard'),
   cfgMayor: document.getElementById('cfgMayor'),
+  cfgSheriff: document.getElementById('cfgSheriff'),
+  cfgThief: document.getElementById('cfgThief'),
   cfgGodfather: document.getElementById('cfgGodfather'),
 
   // God View (host spectator panel)
@@ -145,6 +147,10 @@ const DOM = {
   lblMafiaCount: document.getElementById('lblMafiaCount'),
   lblDocBadge: document.getElementById('lblDocBadge'),
   lblDetBadge: document.getElementById('lblDetBadge'),
+  lblBgBadge: document.getElementById('lblBgBadge'),
+  lblMayorBadge: document.getElementById('lblMayorBadge'),
+  lblSheriffBadge: document.getElementById('lblSheriffBadge'),
+  lblThiefBadge: document.getElementById('lblThiefBadge'),
 
   // Role Reveal
   roleCardElement: document.getElementById('roleCardElement'),
@@ -317,9 +323,11 @@ DOM.btnCreateRoom.addEventListener('click', () => {
   const enableDetective = DOM.cfgDetective.checked;
   const enableBodyguard = DOM.cfgBodyguard.checked;
   const enableMayor = DOM.cfgMayor.checked;
+  const enableSheriff = DOM.cfgSheriff ? DOM.cfgSheriff.checked : false;
+  const enableThief = DOM.cfgThief ? DOM.cfgThief.checked : false;
   const enableGodfather = DOM.cfgGodfather.checked;
 
-  socket.emit('create_room', { hostName, mafiaCount, enableDoctor, enableDetective, enableBodyguard, enableMayor, enableGodfather }, (res) => {
+  socket.emit('create_room', { hostName, mafiaCount, enableDoctor, enableDetective, enableBodyguard, enableMayor, enableSheriff, enableThief, enableGodfather }, (res) => {
     if (res.success) {
       gameState.roomCode = res.roomCode;
       gameState.isHost = true;
@@ -461,6 +469,10 @@ function updateLobbyUI(data) {
   DOM.lblMafiaCount.textContent = gameState.settings.mafiaCount;
   DOM.lblDocBadge.style.display = gameState.settings.doctorCount ? 'inline-flex' : 'none';
   DOM.lblDetBadge.style.display = gameState.settings.detectiveCount ? 'inline-flex' : 'none';
+  if (DOM.lblBgBadge) DOM.lblBgBadge.style.display = gameState.settings.bodyguardCount ? 'inline-flex' : 'none';
+  if (DOM.lblMayorBadge) DOM.lblMayorBadge.style.display = gameState.settings.mayorCount ? 'inline-flex' : 'none';
+  if (DOM.lblSheriffBadge) DOM.lblSheriffBadge.style.display = gameState.settings.sheriffCount ? 'inline-flex' : 'none';
+  if (DOM.lblThiefBadge) DOM.lblThiefBadge.style.display = gameState.settings.thiefCount ? 'inline-flex' : 'none';
 
   // Render players in lobby
   DOM.lobbyPlayersList.innerHTML = '';
@@ -582,7 +594,8 @@ function buildGodViewGrid(containerEl, roles) {
   const iconMap = {
     mafia: 'fa-gun', godfather: 'fa-user-secret', doctor: 'fa-user-doctor',
     detective: 'fa-magnifying-glass', bodyguard: 'fa-shield-halved',
-    mayor: 'fa-star', villager: 'fa-user'
+    mayor: 'fa-star', sheriff: 'fa-user-shield', sherif: 'fa-user-shield',
+    thief: 'fa-mask', villager: 'fa-user'
   };
   roles.forEach(p => {
     const roleKey = (p.role || 'Villager').toLowerCase();
@@ -805,6 +818,12 @@ function renderRoleCard(roleData) {
   } else if (role === 'Mayor') {
     iconHtml = '<i class="fa-solid fa-star"></i>';
     teamText = 'Team: Town (Leader)';
+  } else if (role === 'Sheriff' || role === 'Sherif') {
+    iconHtml = '<i class="fa-solid fa-user-shield"></i>';
+    teamText = 'Team: Town (Law Enforcer)';
+  } else if (role === 'Thief') {
+    iconHtml = '<i class="fa-solid fa-mask"></i>';
+    teamText = 'Team: Town (Rogue)';
   }
 
   DOM.roleIconContainer.innerHTML = iconHtml;

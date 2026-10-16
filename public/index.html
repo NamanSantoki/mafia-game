@@ -134,6 +134,28 @@
             </label>
           </div>
 
+          <div class="config-row">
+            <div class="config-label">
+              <span class="role-pill sheriff"><i class="fa-solid fa-user-shield"></i> Sheriff (1)</span>
+              <small class="helper-text">Enforces law & order for the innocent village</small>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="cfgSheriff">
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="config-row">
+            <div class="config-label">
+              <span class="role-pill thief"><i class="fa-solid fa-mask"></i> Thief (1)</span>
+              <small class="helper-text">A cunning rogue fighting for the village</small>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="cfgThief">
+              <span class="slider"></span>
+            </label>
+          </div>
+
           <div class="config-section-divider">Mafia Roles</div>
 
           <div class="config-row">
@@ -182,6 +204,10 @@
             <span class="badge mafia-badge"><i class="fa-solid fa-gun"></i> <span id="lblMafiaCount">1</span> Mafia</span>
             <span class="badge doctor-badge" id="lblDocBadge"><i class="fa-solid fa-user-doctor"></i> 1 Doctor</span>
             <span class="badge detective-badge" id="lblDetBadge"><i class="fa-solid fa-magnifying-glass"></i> 1 Detective</span>
+            <span class="badge bodyguard-badge" id="lblBgBadge" style="display:none;"><i class="fa-solid fa-shield-halved"></i> 1 Bodyguard</span>
+            <span class="badge mayor-badge" id="lblMayorBadge" style="display:none;"><i class="fa-solid fa-star"></i> 1 Mayor</span>
+            <span class="badge sheriff-badge" id="lblSheriffBadge" style="display:none;"><i class="fa-solid fa-user-shield"></i> 1 Sheriff</span>
+            <span class="badge thief-badge" id="lblThiefBadge" style="display:none;"><i class="fa-solid fa-mask"></i> 1 Thief</span>
             <span class="badge villager-badge"><i class="fa-solid fa-people-group"></i> Rest: Villagers</span>
           </div>
         </div>

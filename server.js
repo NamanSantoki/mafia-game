@@ -140,7 +140,7 @@ io.on('connection', (socket) => {
   let currentRoomCode = null;
 
   // 1. Create Room (Host)
-  socket.on('create_room', ({ hostName, mafiaCount = 1, enableDoctor = true, enableDetective = true, enableBodyguard = false, enableMayor = false, enableGodfather = false }, callback) => {
+  socket.on('create_room', ({ hostName, mafiaCount = 1, enableDoctor = true, enableDetective = true, enableBodyguard = false, enableMayor = false, enableSheriff = false, enableThief = false, enableGodfather = false }, callback) => {
     let code = generateRoomCode();
     while (rooms.has(code)) {
       code = generateRoomCode();
@@ -164,6 +164,8 @@ io.on('connection', (socket) => {
         detectiveCount: enableDetective ? 1 : 0,
         bodyguardCount: enableBodyguard ? 1 : 0,
         mayorCount: enableMayor ? 1 : 0,
+        sheriffCount: enableSheriff ? 1 : 0,
+        thiefCount: enableThief ? 1 : 0,
         godfatherEnabled: enableGodfather || false,
         discussionTimeSeconds: 90
       },
@@ -297,6 +299,8 @@ io.on('connection', (socket) => {
     }
     if (doctorCount !== undefined) room.settings.doctorCount = doctorCount ? 1 : 0;
     if (detectiveCount !== undefined) room.settings.detectiveCount = detectiveCount ? 1 : 0;
+    if (sheriffCount !== undefined) room.settings.sheriffCount = sheriffCount ? 1 : 0;
+    if (thiefCount !== undefined) room.settings.thiefCount = thiefCount ? 1 : 0;
     if (discussionTimeSeconds !== undefined) room.settings.discussionTimeSeconds = parseInt(discussionTimeSeconds) || 90;
 
     io.to(room.code).emit('room_updated', {
@@ -340,6 +344,11 @@ io.on('connection', (socket) => {
         return 'You are the Bodyguard. Each night, choose one player to protect. If the Mafia targets them, you take the bullet — sacrificing yourself to save them!';
       case 'Mayor':
         return 'You are the Mayor. Your voice carries extra weight — your vote counts double during town executions. Use this power wisely to root out the Mafia!';
+      case 'Sheriff':
+      case 'Sherif':
+        return 'You are the Sheriff. An honorable protector and law enforcer of the town. Stand alongside the villagers, uncover the Mafia, and uphold justice!';
+      case 'Thief':
+        return 'You are the Thief. A street-smart rogue aligned with the innocent town. Moving unseen through the shadows, use your cunning to help the villagers expose the Mafia!';
       case 'Villager':
       default:
         return 'You are an Innocent Villager. You have no special night abilities, but your voice and vote are vital to finding and hanging the Mafia!';
@@ -359,10 +368,12 @@ io.on('connection', (socket) => {
     let detReq = room.settings.detectiveCount;
     let bgReq = room.settings.bodyguardCount || 0;
     let mayorReq = room.settings.mayorCount || 0;
+    let sheriffReq = room.settings.sheriffCount || 0;
+    let thiefReq = room.settings.thiefCount || 0;
     const godfatherEnabled = room.settings.godfatherEnabled || false;
 
     // Validation
-    const specialTotal = mafiaReq + docReq + detReq + bgReq + mayorReq;
+    const specialTotal = mafiaReq + docReq + detReq + bgReq + mayorReq + sheriffReq + thiefReq;
     if (total < 3) {
       if (typeof callback === 'function') callback({ success: false, message: 'Need at least 3 players (not counting host) to start.' });
       return;
@@ -379,6 +390,8 @@ io.on('connection', (socket) => {
     for (let i = 0; i < detReq; i++) roleDeck.push('Detective');
     for (let i = 0; i < bgReq; i++) roleDeck.push('Bodyguard');
     for (let i = 0; i < mayorReq; i++) roleDeck.push('Mayor');
+    for (let i = 0; i < sheriffReq; i++) roleDeck.push('Sheriff');
+    for (let i = 0; i < thiefReq; i++) roleDeck.push('Thief');
     while (roleDeck.length < total) {
       roleDeck.push('Villager');
     }
